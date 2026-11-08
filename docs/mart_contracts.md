@@ -8,7 +8,7 @@ Source root: dashboard-royale-main/data/. Source files remain unchanged.
 
 - Default historical window: 2025-01-01 through 2025-06-30 inclusive. Forecast horizon: July 1-30, 2025.
 - Periods are explicit columns. No monthly row inherits a full-window statistical verdict.
-- Each mart is exported as typed Parquet and UTF-8 CSV with the same rows/columns. CSV dates are ISO dates; timestamps are ISO UTC; missing values are empty fields, never zero or the string "None". Parquet is the type authority.
+- Primary delivery is physical tables in the marts schema of output/casino.duckdb. Optional typed Parquet and UTF-8 CSV exports contain the same rows/columns. CSV dates are ISO dates; timestamps are ISO UTC; missing values are empty fields, never zero or the string "None". Database/Parquet schemas are the type authority. Stage 1 does not yet publish mart tables.
 - SQL types below: ID/TEXT = VARCHAR; DATE = DATE; UTC = TIMESTAMP (values always UTC); COUNT = BIGINT; MONEY = DECIMAL(24,2) dollars; THEO = DECIMAL(28,8) dollars; NUMBER = DOUBLE; FLAG = BOOLEAN. A stated nullable field may be NULL; all other fields are required.
 - Month keys use month_start DATE (first day), not free-form strings.
 - Keys must be unique and non-null. Foreign-key references must resolve unless an explicitly documented unknown bucket applies.

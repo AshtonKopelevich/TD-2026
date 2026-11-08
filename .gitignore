@@ -1,2 +1,11 @@
 .codex
 .venv
+.venv-*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+/output/
+/dist/
+/build/
+dashboard-royale-main/data/**/*.csv

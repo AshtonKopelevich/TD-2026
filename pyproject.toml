@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "casino-pipeline"
+version = "0.1.0"
+description = "Validated DuckDB analytical marts for Dashboard Royale"
+requires-python = ">=3.11"
+dependencies = ["duckdb>=1.4,<2"]
+
+[project.optional-dependencies]
+explore = ["pandas>=2.2,<3", "pyarrow>=18", "matplotlib>=3.9,<4"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/casino_pipeline"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
