@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found, The Gilded Ace{% endblock %}
+{% block main %}
+<header class="chapter-head">
+  <h1><span class="chapter-title">Not on this table</span></h1>
+  <p class="headline">That page or machine doesn't exist.</p>
+  <p class="lede"><a href="{{ url_for('machines') }}">Browse every machine</a> or go back to
+    <a href="{{ url_for('case') }}">the case</a>.</p>
+</header>
+{% endblock %}

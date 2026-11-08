@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}The Gilded Ace slot floor review{% endblock %}</title>
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 32'><rect x='1' y='1' width='22' height='30' rx='3' fill='%23103a2e' stroke='%23c9a456' stroke-width='1.5'/><text x='12' y='22' font-size='16' text-anchor='middle' fill='%23c9a456' font-family='Georgia,serif'>A</text></svg>">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('case') }}">
+      <span class="brand-card" aria-hidden="true"><b>A</b><i>♠</i></span>
+      <span class="brand-name">The Gilded Ace<small>Slot floor review, January to June 2025</small></span>
+    </a>
+    <nav aria-label="Chapters">
+      <a class="case-link" href="{{ url_for('case') }}" {% if active == 'case' %}aria-current="page"{% endif %}>The case</a>
+      <ol class="chapter-nav">
+        {% for ep, title, tag, question in chapters %}
+        <li><a href="{{ url_for(ep) }}{{ f.qs() }}" {% if ep == active %}aria-current="page"{% endif %}>
+          <span class="ch-num">{{ loop.index }}</span><span class="ch-title">{{ title }}</span><span class="ch-tag">{{ tag }}</span></a></li>
+        {% endfor %}
+      </ol>
+    </nav>
+    <div class="sidebar-foot">
+      <button type="button" class="theme-toggle" id="theme-toggle">
+        <span class="sr">Color theme: </span><span id="theme-label">Auto</span> theme
+      </button>
+      <p>A fictional casino. All data is synthetic.</p>
+    </div>
+  </aside>
+
+  <main id="content">
+    {% if placeholder %}
+    <p class="banner" role="note"><strong>Placeholder data.</strong> Every chart reads the tables and columns
+      in the mart contract, but the numbers are fake until the real marts are built.</p>
+    {% endif %}
+    {% block main %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('plotly_js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

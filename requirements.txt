@@ -1,4 +1,5 @@
 pandas
 pyarrow
 duckdb
-matplotlib
+plotly
+flask

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title_override or meta.title }}, The Gilded Ace{% endblock %}
+
+{% macro rail(items, label="Key figures", small=false) %}
+<dl class="rail{% if small %} rail-small{% endif %}" aria-label="{{ label }}">
+  {% for t in items %}
+  <div class="rail-item{% if t.tone %} tone-{{ t.tone }}{% endif %}">
+    <dt>{{ t.label }}</dt>
+    <dd class="rail-value">{{ t.value }}</dd>
+    {% if t.sub %}<dd class="rail-sub">{{ t.sub }}</dd>{% endif %}
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{% macro hidden(keys) %}{% for k in keys %}{% if f[k] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endif %}{% endfor %}{% endmacro %}
+
+{% block main %}
+{# ---------- filters: one bar, scoping everything below ---------- #}
+{% if page.no_filters %}
+<div class="filters filters-off">{{ page.scope_note or "Filters don't apply to this chapter." }}</div>
+{% else %}
+<form class="filters" method="get" id="filters" aria-label="Filters">
+  {% if page.period_fixed %}
+  <div class="filter-group"><span class="filter-label">Period</span><span class="fixed-period">January to June 2025, fixed for these tests</span></div>
+  {{ hidden(["start", "end"]) }}
+  {% else %}
+  <div class="filter-group">
+    <span class="filter-label" id="period-label">Period</span>
+    <div class="chips" role="group" aria-labelledby="period-label">
+      {% set presets = [("Jan–Jun", "2025-01-01", "2025-06-30"), ("Q1", "2025-01-01", "2025-03-31"),
+                        ("Q2", "2025-04-01", "2025-06-30"), ("Jan", "2025-01-01", "2025-01-31"),
+                        ("Feb", "2025-02-01", "2025-02-28"), ("Mar", "2025-03-01", "2025-03-31"),
+                        ("Apr", "2025-04-01", "2025-04-30"), ("May", "2025-05-01", "2025-05-31"),
+                        ("Jun", "2025-06-01", "2025-06-30")] %}
+      {% for label, s, e in presets %}
+      <a class="chip" href="?{{ f.qs(start=s|todate, end=e|todate)[1:] }}" {% if f.start.isoformat() == s and f.end.isoformat() == e %}aria-current="true"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+    <label class="date"><span class="sr">From</span>
+      <input type="date" name="start" value="{{ f.start.isoformat() }}" min="{{ period_start.isoformat() }}" max="{{ period_end.isoformat() }}"></label>
+    <span class="dash" aria-hidden="true">to</span>
+    <label class="date"><span class="sr">To</span>
+      <input type="date" name="end" value="{{ f.end.isoformat() }}" min="{{ period_start.isoformat() }}" max="{{ period_end.isoformat() }}"></label>
+  </div>
+  {% endif %}
+
+  {% if page.location_filters is sameas false %}
+    {{ hidden(["zone", "bank"]) }}
+  {% else %}
+  <div class="filter-group">
+    <label><span class="filter-label">Zone</span>
+      <select name="zone" id="zone-select">
+        <option value="">Whole floor</option>
+        {% for z in opts.zones %}<option value="{{ z.zone_id }}" {% if z.zone_id == f.zone %}selected{% endif %}>{{ z.zone_name }}</option>{% endfor %}
+      </select></label>
+    <label><span class="filter-label">Bank</span>
+      <select name="bank" id="bank-select">
+        <option value="">All banks</option>
+        {% for b in opts.banks %}<option value="{{ b.bank_id }}" data-zone="{{ b.zone_id }}" {% if b.bank_id == f.bank %}selected{% endif %}>{{ b.bank_id }}</option>{% endfor %}
+      </select></label>
+  </div>
+  {% endif %}
+
+  {% if page.diag_filter %}
+  <div class="filter-group">
+    <label><span class="filter-label">Diagnosis</span>
+      <select name="diag"><option value="">Show both lists</option>
+        {% for code, label in class_options %}<option value="{{ code }}" {% if code == f.diag %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+  </div>
+  {% else %}{{ hidden(["diag"]) }}{% endif %}
+
+  {% if page.guest_filters %}
+  <div class="filter-group">
+    <label><span class="filter-label">Tier</span>
+      <select name="tier"><option value="">All tiers</option>
+        {% for v in opts.tiers %}<option {% if v == f.tier %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label><span class="filter-label">Age</span>
+      <select name="age_band"><option value="">All ages</option>
+        {% for v in opts.age_bands %}<option {% if v == f.age_band %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label><span class="filter-label">Home</span>
+      <select name="home_region"><option value="">Everywhere</option>
+        {% for v in opts.home_regions %}<option {% if v == f.home_region %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+  </div>
+  {% else %}{{ hidden(["tier", "age_band", "home_region"]) }}{% endif %}
+
+  <noscript><button type="submit">Apply filters</button></noscript>
+  {% if f.qs() %}<a class="reset" href="{{ request.path }}">Clear filters</a>{% endif %}
+</form>
+{% endif %}
+
+{# ---------- chapter header, on the felt ---------- #}
+<header class="chapter-head">
+  {% if page.back %}<a class="back" href="{{ url_for('machines') }}{{ f.qs() }}">Back to the machine explorer</a>{% endif %}
+  <h1>
+    {% if not page.title_override %}<span class="chapter-num" aria-hidden="true">{{ meta.num }}</span>{% endif %}
+    <span class="chapter-title">{{ page.title_override or meta.title }}</span>
+  </h1>
+  {% if not page.title_override %}<p class="question"><span class="qtag">{{ meta.tag }}</span> {{ meta.question }}</p>{% endif %}
+  <p class="headline">{{ page.headline }}</p>
+  {% if page.lede %}<p class="lede">{{ page.lede }}</p>{% endif %}
+  {% if not page.no_filters %}
+  <p class="scope">
+    <span>{{ "January to June 2025" if page.period_fixed else f.period_label }}</span>
+    {% if page.location_filters is not sameas false %}<span>{{ f.location_label }}</span>{% endif %}
+    {% if page.guest_filters %}<span>{{ f.guest_label }}</span>{% endif %}
+  </p>
+  {% endif %}
+</header>
+
+{% if page.rail %}{{ rail(page.rail) }}{% endif %}
+
+{% for s in page.sections %}
+<section class="story-section">
+  {% if s.title %}
+  <header class="section-head">
+    <h2>{% if s.tag %}<span class="qtag">{{ s.tag }}</span> {% endif %}{{ s.title }}</h2>
+    {% if s.headline %}<p class="section-headline">{{ s.headline }}</p>{% endif %}
+    {% if s.intro %}<p class="section-intro">{{ s.intro }}</p>{% endif %}
+  </header>
+  {% endif %}
+  {% if s.rail %}{{ rail(s.rail, s.title ~ " figures", true) }}{% endif %}
+
+  {% if s.charts %}
+  <div class="grid">
+    {% for c in s.charts %}
+    <figure class="panel chart{% if c.wide %} wide{% elif c.third %} third{% endif %}" id="{{ c.id }}">
+      <figcaption>
+        <h3>{{ c.title }}</h3>
+        {% if c.subtitle %}<p>{{ c.subtitle }}</p>{% endif %}
+      </figcaption>
+      <div class="plot" data-fig="fig-{{ c.id }}" role="img" aria-label="{{ c.title }}. A table version follows."></div>
+      <script type="application/json" id="fig-{{ c.id }}">{{ c.spec }}</script>
+      <footer class="panel-foot">
+        <span class="source">From {{ c.source }}{% if c.note %}. {{ c.note }}{% endif %}</span>
+        {% if c.table %}<details><summary>Show the numbers</summary>{{ c.table }}</details>{% endif %}
+      </footer>
+    </figure>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if s.blocks %}
+  <div class="panel block">
+    {% for b in s.blocks %}{{ b }}{% endfor %}
+    {% if s.source %}<p class="source">From {{ s.source }}</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if page.meaning %}
+<aside class="meaning" aria-labelledby="meaning-title">
+  <h2 id="meaning-title">What this means for the decision</h2>
+  <p>{{ page.meaning }}</p>
+</aside>
+{% endif %}
+{% if page.scope_note and not page.no_filters %}<p class="scope-note">{{ page.scope_note }}</p>{% endif %}
+
+{% if not page.back %}
+<nav class="pager" aria-label="Chapter navigation">
+  {% if meta.prev %}<a class="prev" href="{{ url_for(meta.prev.endpoint) }}{{ f.qs() }}"><small>Previous chapter</small>{{ meta.prev.num }}. {{ meta.prev.title }}</a>
+  {% else %}<a class="prev" href="{{ url_for('case') }}"><small>Back to</small>The case</a>{% endif %}
+  {% if meta.next %}<a class="next" href="{{ url_for(meta.next.endpoint) }}{{ f.qs() }}"><small>Next chapter</small>{{ meta.next.num }}. {{ meta.next.title }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

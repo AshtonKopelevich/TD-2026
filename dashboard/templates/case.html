@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}The case, The Gilded Ace slot floor review{% endblock %}
+
+{% block main %}
+<section class="case-hero" aria-labelledby="case-title">
+  <p class="case-kicker">The general manager plans to replace the 10 slot machines that earned the least from
+    January to June. Before spending on new cabinets, we asked why each one earned so little.</p>
+
+  <h1 id="case-title" class="case-title">Luck, location, or a leak?</h1>
+
+  <div class="table-layout">
+    <svg class="felt-print" viewBox="0 0 1000 480" aria-hidden="true" focusable="false">
+      <path class="rail-edge" d="M 10 0 A 490 478 0 0 0 990 0" />
+      <path class="layout-line" d="M 52 0 A 448 440 0 0 0 948 0" />
+      <path id="arc-text" d="M 190 64 A 602 602 0 0 0 810 64" fill="none" />
+      <text class="arc-title"><textPath href="#arc-text" startOffset="50%" text-anchor="middle">Luck, location, or a leak?</textPath></text>
+      <path id="arc-sub" d="M 290 150 A 381 381 0 0 0 710 150" fill="none" />
+      <text class="arc-sub"><textPath href="#arc-sub" startOffset="50%" text-anchor="middle">The manager's ten, placed on the cause we found</textPath></text>
+    </svg>
+
+    {% set ns = namespace(k=0) %}
+    <ol class="spots" aria-label="Where the manager's 10 machines landed">
+      {% for s in case.spots %}
+      <li class="spot{% if s.machine %} spot-machine{% endif %}{% if not s.chips %} spot-empty{% endif %}"
+          style="--x: {{ s.x }}%; --y: {{ s.y }}%">
+        <div class="spot-ring" aria-hidden="true">
+          {% for c in s.chips %}<span class="casino-chip" style="--n: {{ loop.index0 }}; --order: {{ ns.k }}"></span>{% set ns.k = ns.k + 1 %}{% endfor %}
+        </div>
+        <p class="spot-name">{{ s.name }}</p>
+        <p class="spot-count">{% if s.chips %}{{ s.chips|length }} machine{{ "s" if s.chips|length != 1 }}{% else %}none{% endif %}</p>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <p class="table-key">Dashed spots mean the machine itself isn't the problem; solid spots mean it is.
+    Each orange chip is one of the manager's 10.</p>
+
+  <div class="case-verdict">
+    <p class="headline">{{ case.headline }}</p>
+    <p class="lede">{{ case.meaning }}</p>
+    <dl class="spot-list">
+      {% for s in case.spots if s.chips %}
+      <div><dt>{{ s.name }}</dt><dd>{% for c in s.chips %}<a href="{{ c.href }}">{{ c.id }}</a>{{ ", " if not loop.last }}{% endfor %}</dd></div>
+      {% endfor %}
+    </dl>
+    <a class="cta" href="{{ url_for('verdict') }}">Read the verdict</a>
+  </div>
+</section>
+
+<section class="case-chapters" aria-labelledby="chapters-title">
+  <h2 id="chapters-title">The investigation in seven chapters</h2>
+  <p class="section-intro">Each chapter answers one of the challenge's questions and ends with what it means
+    for the $100,000. The sentences below are computed from the data.</p>
+  <ol class="chapter-index">
+    {% for c in case.chapters %}
+    <li><a href="{{ url_for(c.endpoint) }}">
+      <span class="ci-num" aria-hidden="true">{{ c.num }}</span>
+      <span class="ci-body">
+        <span class="ci-title">{{ c.title }} <span class="qtag">{{ c.tag }}</span></span>
+        <span class="ci-question">{{ c.question }}</span>
+        <span class="ci-story">{{ c.story }}</span>
+      </span>
+    </a></li>
+    {% endfor %}
+  </ol>
+</section>
+{% endblock %}
