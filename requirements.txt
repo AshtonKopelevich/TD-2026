@@ -4,3 +4,4 @@ duckdb
 plotly
 flask
 numpy
+uv
