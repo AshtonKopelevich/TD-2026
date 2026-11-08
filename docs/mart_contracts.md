@@ -1,6 +1,6 @@
 # Proposed mart contracts
 
-Status: eleven marts are implemented through stage 5, including tickets and hourly downtime. Three marts remain proposed; monthly machine statistics are deferred to stage 6. Protective/comp-change flags remain unavailable until configured and implemented. Hidden-downtime detection requires a configured busy-peer threshold.
+Status: all fourteen marts and the stage-eight artifact/export/handoff tooling are implemented. The action mart is intentionally empty until proposals are configured. Protective/comp-change flags remain unavailable until configured and implemented. Hidden-downtime detection requires a configured busy-peer threshold. Current verification/consumer status is in output/reports/handoff.md.
 Scope: the 14 marts in Dashboard_Royale_Team_Plan_v2.pdf. No presentation-tool requirements.
 Source root: dashboard-royale-main/data/. Source files remain unchanged.
 
@@ -100,7 +100,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Columns: machine_id ID; month_start, period_start, period_end DATE (period bounds inclusive); active_days COUNT; manufacturer, lease_class TEXT; groups M and R; location_count, config_count COUNT; luck_z_score, luck_p_value, luck_q_value, bootstrap_hold_gap_low, bootstrap_hold_gap_high NUMBER nullable; statistical_status TEXT.
 - Sum M; recompute R. Sum outcome variances before computing the monthly z-score. Bootstrap bounds describe SUM(residual)/SUM(coin-in), not dollar totals.
 - No single location/config field: machines may move or change settings within a month. No full-window classification column.
-- Implemented period_start/period_end are the first/last observed active date. outcome_variance_usd2 NUMBER sums daily variance. Statistical fields remain NULL with statistical_status='not_implemented' until stage 6.
+- Implemented period_start/period_end are the first/last observed active date. outcome_variance_usd2 NUMBER sums daily variance. Stage 6 adds CLT/BH outputs when monthly exposure meets 21 active/14 wager dates. Bootstrap intervals remain NULL under the eight-complete-week rule, with explicit status.
 - Checks: additive values reconcile exactly to daily rows within money rounding tolerance. Monthly multiple-testing correction is separate for each month.
 
 ## 5. mart_machine_scorecard
@@ -116,6 +116,8 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Peer rate: aggregate other machines' theo and available hours in the same zone on the same dates; exclude the target. bank-based comparisons go in diagnostics. Peer comparisons are descriptive and may reflect game mix.
 - Proposed classifications: insufficient_evidence / mixed_evidence / weak_demand_candidate / location_associated / downtime_associated / repair_associated / hold_inspection_lead / luck_compatible / no_clear_issue. Preserve component flags so a single label does not hide overlapping explanations.
 - Checks: one verdict window only; ranks unique and deterministic among eligible rates; p/q values in [0,1]; bounds ordered. Classification thresholds are review items below, not silent constants.
+- Stage 6 adds outcome_variance_usd2 NUMBER; positive_wager_days, bootstrap_usable_blocks, bootstrap_covered_days, bootstrap_valid_replicates, test_family_size COUNT; clt_eligible/bootstrap_eligible FLAG; clt_status/bootstrap_status/statistical_family TEXT to scorecard and monthly statistical detail (variance was already in monthly). Peer coin/contribution/floor rates, coverage fraction, method/dependence/concentration warnings and comparable/rebound ticket counts expose classification evidence. See methodology and metadata.mart_columns for the complete implemented schema.
+- Full-window tests retain 60/30 exposure minima. Peer flags require 3 peers/day, 30 covered days and 80% date coverage. Complete blocks must cover >=80% of days and >=95% of resamples must have positive wagering. Monthly thresholds differ only for CLT; monthly block minima are not relaxed.
 
 ## 6. mart_floor_daily
 
@@ -232,6 +234,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Candidate selection uses April only; historical future events must have been announced by the forecast origin, not merely by the event date. Weather, later-published visitation and holdout actual-derived lags are excluded.
 - Diagnostics include model/baseline MAE overall/by weekday, selection results, training ranges and feature provenance. Prediction freeze is a procedural audit record, not proof that historical files were never inspected.
 - Checks: 211 default dates; actuals match floor daily; fitting windows precede evaluated dates; no refitting within May-Jun; no historical holiday/event lookup masquerading as known July data.
+- Implemented candidates: weekday means versus weekday/holiday/advance-announced city/property-event regression. April MAE selects; ties prefer weekday means. Predictions are nonnegative, cent-rounded and frozen in diagnostics.forecast_frozen_predictions before evaluation. Actual build timestamps and simulated forecast origins are distinct. Future holiday inputs explicitly include July 4; event coverage is limited to supplied announcements.
 
 ## 16. mart_actions
 
@@ -244,6 +247,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - low/high are explicit assumption or validated error scenarios, not automatically 95% confidence intervals. NULL benefit is valid for inspection/information actions. Half-effect scenario = 0.5 * benefit_before_action_cost - total_cost.
 - Forecast supplies a floor-level no-action reference; allocating it to a target requires an explicit allocation assumption. Forecast alone does not estimate intervention uplift.
 - Checks: selected portfolio <= $100,000 and <= 3 distinct action types (keep-budget choice excluded); catalogue quantity limits apply across all selected rows; enforce incompatibilities/target conflicts; nonnegative quantities/costs; horizon is July 1-30. Empty proposals yield a valid empty mart with schema and an explicit unallocated budget report, not invented recommendations.
+- Stage 7 adds benefit_days_per_unit NUMBER; affected_machine_count COUNT; nullable downtime_opportunity_cost_usd_per_hour and forecast_no_action_coin_in_usd MONEY; nullable forecast_allocation_share NUMBER; unit_start_dates/cost_assumption TEXT. Uplift scenarios are per unit/day before proposal charges, reduced for downtime and explicit duration. Active target membership, quantity/incompatibility expansion and configuration snapshots are recorded. See docs/action_proposals.md for input rules and limitations.
 
 ## 17. Validation and acceptance
 

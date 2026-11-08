@@ -118,7 +118,10 @@ def finalize_contract(con, contract):
         if name not in contract.nullable:
             con.execute(f"ALTER TABLE {table} ALTER COLUMN {quote_identifier(name)} SET NOT NULL")
     key = ", ".join(quote_identifier(name) for name in contract.key)
-    con.execute(f"ALTER TABLE {table} ADD PRIMARY KEY ({key})")
+    has_key = con.execute("""SELECT count(*) FROM duckdb_constraints()
+        WHERE schema_name='marts' AND table_name=? AND constraint_type='PRIMARY KEY'""", [contract.name]).fetchone()[0]
+    if not has_key:
+        con.execute(f"ALTER TABLE {table} ADD PRIMARY KEY ({key})")
     return {"name": table, "rows": con.execute(f"SELECT count(*) FROM {table}").fetchone()[0],
             "key": list(contract.key), "columns": [
                 {"name": name, "type": dtype, "nullable": name in contract.nullable}
@@ -144,7 +147,7 @@ def validate_descriptive(con):
           OR m.location_count<>d.location_count OR m.config_count<>d.config_count""")
     for contract in (MONTH,):
         conditions = [f"{name} IS NOT NULL" for name in STATS]
-        check(f"{contract.name}.statistics_deferred", f"SELECT count(*) FROM marts.{contract.name} WHERE " +
+        check(f"{contract.name}.statistics_initialized_deferred", f"SELECT count(*) FROM marts.{contract.name} WHERE " +
               " OR ".join(conditions + ["statistical_status<>'not_implemented'"]))
     formulas = {"availability_ratio": "available_seconds::DOUBLE/nullif(scheduled_seconds,0)",
                 "occupancy_ratio": "occupied_seconds::DOUBLE/nullif(available_seconds,0)",

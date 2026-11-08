@@ -1,8 +1,8 @@
 # Methodology and implementation status
 
 Stage 1 inventories source schemas and validates source identity/declared keys.
-Stage 2 materializes the machine-day mart; no statistical classifications or
-causal conclusions have been computed.
+Stage 2 materializes the machine-day mart; stage 6 adds statistical evidence and
+descriptive classifications. These do not establish causal conclusions.
 
 Machine-day raw cents and squared-bet totals supply all-play and tracked meters.
 Prepared daily views supply machine cost components and zone labels. Effective
@@ -183,3 +183,122 @@ Only two targeted tests were used for stage 5: known overlapping fault/planned
 intervals, peer estimates and pseudo-outages, plus partial installation and missing
 peer coverage. The failed peer check was rerun after fixing its schedule reference;
 the earlier stage suites were not rerun. One complete build reconciled actual data.
+
+## Stage 6: machine evidence and classifications
+
+Approximate z = sum(house win - theo) / sqrt(sum(game payout-multiplier variance
+times squared bets in dollars)). Configuration-specific daily variance already
+covers all play, including uncarded play. Eligibility uses 60 active/30 wager dates
+for the full window and 21/14 for monthly tests. Zero variance and inadequate
+exposure give NULL tests. Two-sided p-values use erfc; BH q-values are computed
+within the eligible full-window family and separately within each calendar month.
+Family sizes are reported even for ineligible rows. BH assumes independence or
+suitable positive dependence; no overall FDR claim spans all seven families.
+
+Nonoverlapping seven-day calendar blocks are built within uninterrupted placement
+episodes, preserving each day's residual and wagering together. Each episode is
+resampled with its original number of complete blocks, so configurations/locations
+are not freely mixed. Remainders are discarded with covered-day counts exposed;
+at least eight blocks and 80% day coverage are required. The seed derives from a
+stable hash of the configured seed, machine and period. 10,000 resamples are processed
+in bounded batches. Zero-denominator resamples are counted and omitted; fewer than
+95% valid draws leaves the interval unavailable. Degenerate block variation also
+gives no interval. Percentile intervals describe the covered-data hold residual,
+not a dollar interval or a bootstrap hypothesis-test p-value. Eight weeks cannot
+fit in a month, so monthly intervals remain NULL even when monthly CLT tests qualify.
+
+Normalized daily residuals are screened for lag-one, weekend, day-of-month,
+temperature, observed traffic and event association. Lag pairs never bridge a gap
+or placement change. Correlations require twenty valid pairs; traffic requires
+80% source coverage. Absolute correlation >=0.30 is a warning, not a formal
+significance threshold. A single day contributing over 25% of variance or wagering
+also warns. Neither small correlations nor a bootstrap CI establish independence,
+stationarity or normal approximation accuracy. High-volatility games may retain
+rare-event uncertainty that neither method captures from observed history.
+
+Daily peer pools exclude the target and use only positive available exposure.
+Zone rates on matching dates are weighted by the target's hours. Target-to-peer
+ratios use the same covered dates, rather than comparing a covered benchmark with
+all target days. Eligibility requires three peers per date, thirty covered dates,
+80% coverage and full-window exposure minima. Weak-demand flags require at least
+20% gaps in both wager and theo rates. Quiet-zone location flags require a 20%
+zone-to-floor wager-rate gap, a machine near its zone benchmark, and below-floor
+machine wagering. Peer/floor context is descriptive and does not fully control
+game mix. Bank-level and placement summaries are retained for further investigation.
+
+Unavailable time >=5% of scheduled on-floor time triggers a downtime flag after
+60 dates. Repair association requires two comparable fault tickets, with at least
+half improving theo/hour by 20%. These thresholds are sensitivity parameters.
+Expected contribution after supplied machine costs per available hour determines
+adjusted ranks; actual house win determines the GM ranking. Ties use machine IDs.
+
+Inspection flags use q<=alpha, suppressed for dependence/concentrated-exposure
+warnings. Luck compatibility requires a non-rejection and, where available, a
+bootstrap interval spanning zero. A corrected CLT decision and unadjusted block
+interval can disagree simply because their multiplicity treatments differ; this
+is explicitly surfaced, not interpreted as a second significant test. Classification
+preserves overlapping flags, uncertainty and insufficient data. It never infers
+replacement value, fraud, or causality from a p-value. Verdicts are fixed-window
+artifacts and are not automatically recalculated for app filters.
+
+## Stage 7: forecast selection and proposal costing
+
+Two candidates compete: weekday means and least-squares regression with intercept,
+six weekday indicators, holiday, known citywide-event and known property-event
+flags. Features use source calendar holidays plus an explicit July 4 future flag.
+Events qualify only if announced by the fit origin, including for all future
+dates in that prediction block. Weather, tourism revisions, actual holdout lags,
+repairs and recommendation outcomes are not features. Nonnegative prediction
+clipping and cent rounding apply consistently before selection/evaluation.
+
+Candidate fits query Jan-Mar targets only and materialize April predictions before
+joining April actuals. Minimum April MAE selects the architecture, with weekday
+means winning exact ties. The chosen architecture and a constant-mean baseline
+refit Jan-Apr and materialize May-Jun predictions before test evaluation. Holdout
+MAE is reported overall and by weekday; failure to beat the baseline is a valid
+result and does not trigger retrospective reselection. The same architecture
+then refits Jan-Jun for July 1-30, with no action applied to the baseline demand.
+
+Model parameters, prediction snapshots, feature cutoffs, candidate errors and
+selection are retained. prediction_frozen_at_utc records the actual build time;
+forecast_origin is a simulated 2025 cutoff, not evidence of a genuine historical
+2025 forecast. No July event listing is supplied, so flags reflect limited source
+coverage. A different forecast horizon requires updating future holiday inputs.
+
+Proposal configuration is explicit and content-fingerprinted. Catalogue prices,
+quantity limits, leads and incompatibility groups are authoritative. Targets resolve
+against placements active at horizon start. Bank/manufacturer downtime expands to
+affected machines. Operating opportunity and incremental uplift are reduced for
+action downtime separately; proposal cash costs are subtracted once. Scenario
+assumptions must exclude charges already present in the proposal budget. These
+benefits are not statistical effect estimates or confidence intervals.
+
+Selected portfolios must stay within $100,000 and three action types, excluding
+preserved funds. Catalogue quantities aggregate across selected rows. Move and
+replacement conflicts expand bank membership; comp policy alternatives conflict
+globally. Promotion dates and durations must respect lead times and cannot overlap.
+Unknown information benefits remain NULL. Forecast target allocation requires an
+explicit share and is context only, not inferred uplift. Joint effects, substitution
+and destination feasibility require separate evidence/operational review.
+
+The default empty CSV produces a valid empty action mart, no_proposals status and
+the entire budget unallocated. This is a configuration state, not a finding that
+preserving all funds is optimal. Three focused tests cover holdout isolation,
+lease/downtime economics and conflicts, and empty-proposal publication.
+
+## Stage 8: standalone delivery
+
+The published database is reopened read-only and checked against its embedded
+manifest for all fourteen physical marts, keys, column types/nullability and row
+counts. Representative parameterized consumer queries verify standalone use.
+Optional CSV/Parquet exports are streamed in key order, verified and checksummed;
+the delivery includes a generated column dictionary and per-build handoff report.
+Rebuild comparison uses the documented normalized, order-independent diagnostic
+hashes rather than asserting byte-for-byte equality.
+
+Two focused tests cover export round trips (including empty tables, decimals,
+NULLs and timestamps) and artifact inspection/content fingerprints. The final
+real-data delivery passed 320 build checks and 48 artifact checks and matched the
+preceding build. Ten Flask routes passed; two required quoting one reserved SQL
+alias and were retried individually. Route checks establish query compatibility,
+not visual correctness or approval of dashboard interpretations.

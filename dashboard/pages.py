@@ -963,7 +963,7 @@ def _player_totals(f: Filters) -> dict:
              r AS (SELECT ROW_NUMBER() OVER (ORDER BY loss DESC) rn, COUNT(*) OVER () n,
                           SUM(loss) OVER () total,
                           SUM(loss) OVER (ORDER BY loss DESC ROWS UNBOUNDED PRECEDING) cum FROM p)
-        SELECT CEIL(100.0 * rn / n)::INT pct, arg_max(cum, rn) / any_value(total) share
+        SELECT CEIL(100.0 * rn / n)::INT pct, arg_max(cum, rn) / any_value(total) AS "share"
         FROM r GROUP BY 1 ORDER BY 1""", p)
     r["curve"] = curve
     share = curve.set_index("pct").share

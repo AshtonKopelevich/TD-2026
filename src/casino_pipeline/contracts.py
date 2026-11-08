@@ -140,6 +140,15 @@ REQUIRED_TYPES["shift_roster"] = {
     "start_utc": "TIMESTAMP", "end_utc": "TIMESTAMP",
 }
 
+# Stage-seven calendar features, catalogue pricing and target scopes.
+REQUIRED_TYPES['events'].update({'announced_date':'DATE','local_scope':'VARCHAR'})
+REQUIRED_TYPES['shift_roster']['shift'] = 'VARCHAR'
+REQUIRED_TYPES['action_catalog'] = {
+    **dict.fromkeys('action_type_id name unit incompatibility_group notes'.split(),'VARCHAR'),
+    'unit_cost_cents':'BIGINT','recurring_cost_cents_per_day':'BIGINT',
+    **dict.fromkeys('lead_days downtime_minutes quantity_limit'.split(),'INTEGER'),
+}
+
 SOURCE_CONTRACTS = tuple(
     SourceContract(name, f"{folder}/{name}.parquet", KEYS.get(name, ()), REQUIRED_TYPES.get(name, {}))
     for folder, names in GROUPS.items() for name in names

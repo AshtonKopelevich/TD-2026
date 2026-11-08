@@ -3,3 +3,4 @@ pyarrow
 duckdb
 plotly
 flask
+numpy

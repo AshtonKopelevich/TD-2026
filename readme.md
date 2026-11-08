@@ -3,7 +3,7 @@
 Build analytical marts from the official Parquet sources for a separate Flask app.
 Source data stays in `dashboard-royale-main/data/` and is read-only.
 
-## Current implementation: stages 1-5
+## Current implementation: stages 1-8
 
 - Explicit discovery of all 31 Parquet tables; CSV.gz duplicates are excluded.
 - DuckDB `raw` source views, with no duplicate source ingestion/copy.
@@ -24,7 +24,14 @@ Source data stays in `dashboard-royale-main/data/` and is read-only.
   diagnostics.
 - Stage 5 adds operations tickets and hourly downtime: de-duplicated outages,
   other-bank peer estimates, staffing context and pseudo-outage error diagnostics.
-  Three contracted marts are still planned.
+  Three contracted marts are still planned at stage 5.
+- Stage 6 adds a full-window machine scorecard, CLT/BH tests, paired block-bootstrap
+  sensitivity intervals, peer/location comparisons and overlapping evidence flags.
+  Monthly CLT outputs are enriched separately.
+- Stage 7 adds frozen backtest/July forecasts and explicit proposal costing. All
+  fourteen contracted marts are generated.
+- Stage 8 inspects the standalone artifact, generates its dictionary and handoff
+  reports, compares a previous build, and optionally exports marts or checks Flask routes.
 
 ## Setup and run
 
@@ -64,7 +71,10 @@ is the legacy exploration dependency list.
 Run source checks only (without replacing any published database) using
 `uv run python run_all.py --sources-only`.
 
-The default builds through stage 5. Use `--stage 4` for the guest/comp marts only,
+The default builds through stage 8. Use `--stage 7` to skip final handoff packaging,
+`--stage 6` to stop before forecasting/actions,
+`--stage 5` to stop before scorecard statistics,
+`--stage 4` for the guest/comp marts only,
 `--stage 3` for descriptive marts only or
 `--stage 2` for the machine-day mart. `--stage 1` is equivalent to sources-only.
 Stage 4 requires a whole-month analysis window within one year; app filters can
@@ -89,9 +99,19 @@ no source-file views. The default release produces 55,092 machine-days, excludin
 | `marts.mart_comps_tier_month` | Opening-tier cohort x month | 18 |
 | `marts.mart_tickets` | Operations ticket overlapping the analysis window | 1,226 |
 | `marts.mart_downtime_hourly` | Installed machine x UTC hour | 1,321,908 |
+| `marts.mart_machine_scorecard` | Machine, fixed analysis window | 310 |
+| `marts.mart_forecast` | Historical/forecast date | 211 |
+| `marts.mart_actions` | Configured proposal x target | 0 with empty default config |
 
-Monthly statistical outputs are NULL with `statistical_status='not_implemented'`
-until stage 6. Floor contribution subtracts technician labor once. Zone traffic
+Full-window CLT tests require 60 active and 30 positive-wager dates; monthly tests
+require 21 and 14. BH correction is separate for the full-window family and each
+month. Bootstrap intervals require eight complete seven-day blocks, so monthly
+intervals remain NULL with explicit insufficient-block status. Full-window intervals
+use 10,000 seeded resamples within placement episodes; they are sensitivity checks,
+not a second set of hypothesis-test p-values. Scorecard rankings/classifications
+are fixed to the build's analysis dates, not recomputed by app date filters.
+
+Floor contribution subtracts technician labor once. Zone traffic
 uses an explicitly inferred full-day sensor roster; missing rows reduce coverage,
 and offline entries remain NULL. Weather is calendar-date context, not a forecast
 input. Benchmark indices use January=100, with NULL for missing/zero January
@@ -115,6 +135,19 @@ peer/reference coverage gives NULL estimates. Error bounds are empirical scenari
 from deterministic pseudo-outages, not confidence intervals. See
 `diagnostics.downtime_model_validation`, `downtime_validation_cases`, and
 `downtime_coverage`. Hidden downtime stays NULL until BUSY_PEER_THRESHOLD is set.
+
+Forecasting selects weekday means versus calendar regression using April, freezes
+May-Jun predictions from Jan-Apr fits, scores them against a constant-mean baseline,
+then refits the selected method on Jan-Jun for July 1-30. Diagnostics retain
+candidate errors, coefficients, feature cutoffs, frozen predictions and weekday MAE.
+Only calendar/advance-announced events are inputs; no weather or later tourism data.
+July holiday flags are explicitly configured for this horizon (July 4).
+
+`config/action_proposals.csv` is empty by default: no funded recommendations or
+causal benefits are invented. `diagnostics.action_portfolio` reports the full
+$100,000 unallocated; `metadata.action_catalog` retains all 13 catalogue options.
+See [proposal configuration](docs/action_proposals.md) for scenario fields and rules.
+Use another file with `uv run python run_all.py --action-proposals path/to/actions.csv`.
 
 ```python
 import duckdb
@@ -159,11 +192,52 @@ while the previous successful database remains. Its embedded
 
 `sql/staging/` holds shared transformations; `sql/marts/` holds final table assembly.
 `src/casino_pipeline/analysis/` and `model/` will provide analytical intermediates.
-Implemented SQL: the eleven marts above plus context, player activity, receipts,
+Implemented SQL: the fourteen marts above plus context, player activity, receipts,
 loyalty, guest, ticket and hourly staging. `analysis/players.py` produces player
-diagnostics; `analysis/downtime.py` builds outage evidence. Other analytical modules
-and SQL remain placeholders.
+diagnostics; `analysis/downtime.py` builds outage evidence; `analysis/machines.py`
+builds statistical evidence. `model/forecast.py` controls chronological fitting and
+freezing; `actions.py` validates and prices explicit proposals. `handoff.py` inspects
+published artifacts and `export.py` streams optional CSV/Parquet exports.
 `config/action_proposals.csv` starts empty; no recommendations are fabricated.
 
 See [mart contracts](docs/mart_contracts.md), [methodology](docs/methodology.md)
 and [app handoff](docs/app_handoff.md). Generated output is ignored by Git.
+
+## Final handoff and exports
+
+```powershell
+uv sync --extra dashboard
+uv run python run_all.py --verify-hashes --export parquet --check-dashboard
+```
+
+The dashboard check uses Flask's in-process test client, not a running server.
+It checks the actual consumer's routes and filtered queries; it does not certify
+visual presentation or the wording of findings. Dashboard fixes remain with its owner.
+
+Without rebuilding the analyses:
+
+```powershell
+uv run python run_all.py --handoff-only
+uv run python run_all.py --handoff-only --export both
+uv run python run_all.py --handoff-only --check-dashboard
+```
+
+`--export-only` is an alias for `--handoff-only`; combine it with `--export`.
+Exports are optional: keep DuckDB as the app's main data source. Parquet preserves
+SQL types and uses ZSTD compression; CSV loses types and can be much larger for
+hourly data. Files are ordered by key, checked for row counts/schema, and checksummed.
+
+- `output/reports/handoff.md`: stable summary for the most recently inspected build.
+- `output/reports/latest_handoff.json`: pointer to the detailed JSON and dictionary.
+- `output/reports/runs/<build-id>/data_dictionary.md`: generated column/type/key listing.
+- `output/exports/<build-id>/<format>/`: optional mart files.
+- `output/exports/latest.json`: pointer to the verified export manifest.
+
+The source build report and handoff report are distinct: an artifact can pass data
+validation while a consumer route still needs work. The JSON reports show both.
+Rebuild comparison uses order-independent diagnostic row hashes, excludes the
+deliberately changing forecast-freeze timestamp, and normalizes floating precision.
+It is a practical comparison with a prior artifact, not a second full rebuild or
+cryptographic proof of equal values. Source and output SHA-256 hashes are separate.
+
+See [handoff checklist](docs/final_handoff.md) for delivery and refresh instructions.

@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 import subprocess
 import uuid
+import platform
 
 import duckdb
+import numpy
 
 from . import __version__
 from .constants import analytical_defaults
@@ -27,6 +29,8 @@ def create_manifest(dataset, source_manifest, inventory, validation):
     verified = {check["check"]: check["passed"] for check in validation["checks"]}
     return {"build_id": str(uuid.uuid4()), "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "pipeline_version": __version__, "duckdb_version": duckdb.__version__,
+            "python_version":platform.python_version(),"numpy_version":numpy.__version__,
+            "pipeline_code_sha256":code_fingerprint(),
             "git_revision": git_revision(Path(__file__).resolve().parents[2]),
             "stage": "1_sources", "status": "passed" if validation["passed"] else "failed",
             "dataset_path": str(dataset), "source_release": source_manifest.get("version"),
@@ -35,6 +39,19 @@ def create_manifest(dataset, source_manifest, inventory, validation):
             "sources": [{**entry, "declared_sha256": declared.get(entry["path"], {}).get("sha256"),
                          "sha256_verified": verified.get(f"{entry['table']}.sha256", False)}
                         for entry in inventory]}
+
+
+def code_fingerprint():
+    """Fingerprint pipeline implementation/lockfile without reading raw datasets."""
+    import hashlib
+    root = Path(__file__).resolve().parents[2]
+    paths = list((root/'src'/'casino_pipeline').rglob('*.py'))+list((root/'sql').rglob('*.sql'))
+    paths += [root/name for name in ('run_all.py','pyproject.toml','uv.lock') if (root/name).is_file()]
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        digest.update(path.relative_to(root).as_posix().encode()+b'\0')
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def write_json(path, document):
