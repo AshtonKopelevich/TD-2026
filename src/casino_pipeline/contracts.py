@@ -51,6 +51,23 @@ REQUIRED_TYPES = {
     "floor_locations": {"location_id": "VARCHAR", "x_m": "DOUBLE", "y_m": "DOUBLE"},
     "placements": {"machine_id": "VARCHAR", "effective_from_utc": "TIMESTAMP", "effective_to_utc": "TIMESTAMP"},
 }
+# Stage-two inputs: every column used by the machine-day transformation is required.
+REQUIRED_TYPES["machine_day"].update({
+    **dict.fromkeys("machine_id location_id config_id meter_status".split(), "VARCHAR"),
+    **dict.fromkeys("available_seconds occupied_seconds paid_spins carded_spins payout_cents house_win_cents carded_coin_in_cents carded_payout_cents".split(), "BIGINT"),
+    "theo_cents": "DECIMAL(24,8)", "carded_theo_cents": "DECIMAL(24,8)",
+})
+REQUIRED_TYPES["prepared_daily_view"].update({
+    **dict.fromkeys("location_id config_id zone_name".split(), "VARCHAR"),
+    **dict.fromkeys("payout_usd house_win_usd lease_cost_usd service_cost_usd power_cost_usd repair_cost_usd contribution_after_supplied_costs_usd".split(), "DECIMAL(18,2)"),
+    "occupied_hours": "DOUBLE", "faults_opened": "BIGINT",
+})
+REQUIRED_TYPES["calendar_day"].update(dict.fromkeys("gaming_day_start_utc gaming_day_end_utc".split(), "TIMESTAMP"))
+REQUIRED_TYPES["game_math"].update({"configured_rtp": "DECIMAL(10,8)", "theme": "VARCHAR", "volatility_class": "VARCHAR"})
+REQUIRED_TYPES["floor_locations"].update(dict.fromkeys("zone_id bank_id node_type".split(), "VARCHAR"))
+REQUIRED_TYPES["machines"] = dict.fromkeys("machine_id manufacturer lease_class".split(), "VARCHAR")
+REQUIRED_TYPES["placements"].update(dict.fromkeys("placement_id location_id config_id".split(), "VARCHAR"))
+
 SOURCE_CONTRACTS = tuple(
     SourceContract(name, f"{folder}/{name}.parquet", KEYS.get(name, ()), REQUIRED_TYPES.get(name, {}))
     for folder, names in GROUPS.items() for name in names
