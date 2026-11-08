@@ -22,3 +22,10 @@ Zone outlines are approximate. Machines with missing coordinates remain in the
 table. Map clicks and table links open machine details with the date filters kept.
 Machine detail histories include moves; zone/bank filters are retained for the
 return link but do not truncate the individual machine's history.
+
+Forecast (`/forecast`) explains the saved final model without refitting it. The
+weekday-average view shows historical daily wagering, the sum/count calculation
+for each weekday and July 1–30 predictions. Every reconstructed prediction must
+match its saved value to the cent. July predicts wagering volume, not earnings or
+profit. The baseline comparison, error metrics and frozen holdout protocol remain
+available in expandable validation details.
