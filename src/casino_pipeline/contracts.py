@@ -68,6 +68,78 @@ REQUIRED_TYPES["floor_locations"].update(dict.fromkeys("zone_id bank_id node_typ
 REQUIRED_TYPES["machines"] = dict.fromkeys("machine_id manufacturer lease_class".split(), "VARCHAR")
 REQUIRED_TYPES["placements"].update(dict.fromkeys("placement_id location_id config_id".split(), "VARCHAR"))
 
+# Stage-three descriptive/context inputs. Semantic mapping is documented in methodology.md.
+REQUIRED_TYPES["calendar_day"].update({"federal_holiday": "VARCHAR"})
+REQUIRED_TYPES["floor_locations"].update({"name": "VARCHAR"})
+REQUIRED_TYPES["property_day"] = {
+    "gaming_date": "DATE", "active_machines": "BIGINT", "theo_usd": "DECIMAL(18,4)",
+    "available_machine_hours": "DOUBLE", "occupied_machine_hours": "DOUBLE",
+    **dict.fromkeys("coin_in_usd payout_usd house_win_usd pos_cash_usd pos_cogs_usd comp_cost_usd machine_supplied_costs_usd tech_labor_cost_usd contribution_after_supplied_costs_usd".split(), "DECIMAL(18,2)"),
+}
+REQUIRED_TYPES["events"] = {"event_id": "VARCHAR", "name": "VARCHAR", "start_date": "DATE", "end_date": "DATE"}
+REQUIRED_TYPES["zone_traffic_hourly"] = {
+    **dict.fromkeys("sensor_id zone_id counter_status".split(), "VARCHAR"),
+    "hour_start_utc": "TIMESTAMP", "entries_count": "BIGINT", "coverage_minutes": "INTEGER",
+}
+REQUIRED_TYPES["weather_daily"] = {
+    "station_id": "VARCHAR", "source_date": "DATE", "tmax_c": "DECIMAL(8,1)", "prcp_mm": "DECIMAL(8,1)",
+    **dict.fromkeys("tmax_qflag prcp_qflag prcp_mflag".split(), "VARCHAR"),
+}
+REQUIRED_TYPES["benchmark_state_monthly"] = {
+    "month": "VARCHAR", "handle_usd": "DECIMAL(24,2)", "agr_usd": "DECIMAL(24,2)",
+    "source_url": "VARCHAR", "retrieved_date": "DATE",
+}
+REQUIRED_TYPES["city_visitation_monthly"] = {
+    **dict.fromkeys("month source_url source_revision as_of_limitation".split(), "VARCHAR"), "visitor_volume": "BIGINT",
+}
+
+# Stage-four guest accounting inputs (opaque IDs remain text).
+REQUIRED_TYPES["players"] = {
+    **dict.fromkeys("player_id home_region age_band opening_tier".split(), "VARCHAR"),
+    "enrolled_at_utc": "TIMESTAMP",
+}
+REQUIRED_TYPES["sessions"] = {
+    **dict.fromkeys("player_id observed_visit_id logical_session_id session_segment_id".split(), "VARCHAR"),
+    "gaming_date": "DATE", "start_utc": "TIMESTAMP", "end_utc": "TIMESTAMP",
+    "coin_in_cents": "BIGINT", "payout_cents": "BIGINT", "theo_cents": "DECIMAL(24,8)",
+}
+REQUIRED_TYPES["trips"] = {
+    "observed_visit_id": "VARCHAR", "player_id": "VARCHAR", "first_observed_at_utc": "TIMESTAMP", "observation_complete": "BOOLEAN",
+}
+REQUIRED_TYPES["fnb_transactions"] = {
+    **dict.fromkeys("transaction_id player_id observed_visit_id comp_id".split(), "VARCHAR"),
+    "event_at_utc": "TIMESTAMP",
+    **dict.fromkeys("cash_receipt_cents cogs_cents face_value_cents".split(), "BIGINT"),
+}
+REQUIRED_TYPES["loyalty_ledger"] = {
+    **dict.fromkeys("loyalty_event_id player_id event_type redeemed_pos_id".split(), "VARCHAR"),
+    "event_at_utc": "TIMESTAMP",
+    **dict.fromkeys("points_delta economic_cost_cents face_value_cents".split(), "BIGINT"),
+}
+REQUIRED_TYPES["player_period"] = {
+    **dict.fromkeys("player_id period_month home_region age_band opening_tier tier_end".split(), "VARCHAR"),
+    **dict.fromkeys("observed_visits incomplete_visits sessions comps_redeemed points_earned points_redeemed".split(), "BIGINT"),
+    "carded_play_hours": "DOUBLE", "theo_usd": "DECIMAL(18,4)", "luck_residual_usd": "DECIMAL(18,4)",
+    **dict.fromkeys("tracked_coin_in_usd tracked_payout_usd tracked_net_usd linked_pos_cash_usd linked_pos_cogs_usd comp_face_value_usd comp_cost_usd tracked_contribution_usd".split(), "DECIMAL(18,2)"),
+}
+
+# Stage-five hourly and operations inputs.
+REQUIRED_TYPES["machines"]["install_date"] = "DATE"
+REQUIRED_TYPES["operations"] = {
+    **dict.fromkeys("operation_id machine_id location_id event_type".split(), "VARCHAR"),
+    **dict.fromkeys("opened_at_utc recorded_at_utc work_started_at_utc available_at_utc".split(), "TIMESTAMP"),
+    "direct_cost_cents": "BIGINT",
+}
+REQUIRED_TYPES["machine_hour"] = {
+    **dict.fromkeys("machine_id location_id utc_offset".split(), "VARCHAR"), "hour_start_utc": "TIMESTAMP",
+    "gaming_date": "DATE", "local_hour": "INTEGER", "active": "BOOLEAN",
+    **dict.fromkeys("available_seconds occupied_seconds paid_spins coin_in_cents payout_cents".split(), "BIGINT"),
+}
+REQUIRED_TYPES["shift_roster"] = {
+    **dict.fromkeys("assignment_id role zone_id".split(), "VARCHAR"), "gaming_date": "DATE",
+    "start_utc": "TIMESTAMP", "end_utc": "TIMESTAMP",
+}
+
 SOURCE_CONTRACTS = tuple(
     SourceContract(name, f"{folder}/{name}.parquet", KEYS.get(name, ()), REQUIRED_TYPES.get(name, {}))
     for folder, names in GROUPS.items() for name in names

@@ -1,6 +1,6 @@
 # Proposed mart contracts
 
-Status: DRAFT FOR REVIEW. These are proposed output contracts, not implemented tables.
+Status: eleven marts are implemented through stage 5, including tickets and hourly downtime. Three marts remain proposed; monthly machine statistics are deferred to stage 6. Protective/comp-change flags remain unavailable until configured and implemented. Hidden-downtime detection requires a configured busy-peer threshold.
 Scope: the 14 marts in Dashboard_Royale_Team_Plan_v2.pdf. No presentation-tool requirements.
 Source root: dashboard-royale-main/data/. Source files remain unchanged.
 
@@ -100,6 +100,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Columns: machine_id ID; month_start, period_start, period_end DATE (period bounds inclusive); active_days COUNT; manufacturer, lease_class TEXT; groups M and R; location_count, config_count COUNT; luck_z_score, luck_p_value, luck_q_value, bootstrap_hold_gap_low, bootstrap_hold_gap_high NUMBER nullable; statistical_status TEXT.
 - Sum M; recompute R. Sum outcome variances before computing the monthly z-score. Bootstrap bounds describe SUM(residual)/SUM(coin-in), not dollar totals.
 - No single location/config field: machines may move or change settings within a month. No full-window classification column.
+- Implemented period_start/period_end are the first/last observed active date. outcome_variance_usd2 NUMBER sums daily variance. Statistical fields remain NULL with statistical_status='not_implemented' until stage 6.
 - Checks: additive values reconcile exactly to daily rows within money rounding tolerance. Monthly multiple-testing correction is separate for each month.
 
 ## 5. mart_machine_scorecard
@@ -122,9 +123,10 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Grain/key: gaming_date; every calendar day in the historical window, including zero activity if genuinely observed.
 - Sources: property_day, calendar_day, machine daily; weather_daily and events as separately aggregated context.
 - Columns: gaming_date, month_start DATE; weekday_index COUNT (Monday=0); is_weekend FLAG; federal_holiday TEXT nullable; events_active TEXT nullable; active_machines COUNT; scheduled_machine_hours, available_machine_hours, occupied_machine_hours NUMBER; coin_in_usd, payout_usd, house_win_usd MONEY; theo_usd THEO; carded_coin_in_usd MONEY; carded_coin_in_share, coin_in_per_active_machine_day NUMBER nullable; pos_cash_usd, pos_cogs_usd, comp_cost_usd, machine_cost_usd, tech_labor_cost_usd, actual_floor_contribution_usd MONEY; weather_temperature_max_c, weather_precipitation_mm NUMBER nullable; weather_status TEXT.
-- Actual floor contribution = house win + POS cash - POS COGS - supplied machine costs. Tech labor is separately reported; subtract it only if source definition confirms it is not already included. Name/definition must be settled before implementation.
+- Resolved from source verification code and numerical reconciliation: actual_floor_contribution_usd = house win + POS cash - POS COGS - supplied machine costs - tech labor. Labor is separately reported and subtracted once.
 - Weather is context keyed by local calendar date matching gaming_date; label this approximation (weather reporting window is not necessarily 06:00-06:00). Source units must be verified before converting to the named units.
 - Events are joined by local date range after aggregation, never one output row per event.
+- Implemented NOAA station: USW00023169; source tmax_c/prcp_mm are Celsius/mm. Nonempty quality flags suppress the affected measure. Additional nullable weather_precipitation_trace FLAG preserves a source trace-rainfall indicator.
 - Checks: 181 default rows; calendar complete; floor machine meters reconcile to machine daily; contextual joins preserve row count. Weather is not a default forecast feature.
 
 ## 7. mart_zone_daily
@@ -135,6 +137,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Columns: zone_id ID; zone_name TEXT; gaming_date, month_start DATE; active_machines COUNT; scheduled_seconds, available_seconds, occupied_seconds COUNT; coin_in_usd, house_win_usd MONEY; theo_usd THEO; coin_in_per_available_hour, theo_per_available_hour NUMBER nullable; entries_observed COUNT nullable; counter_observed_seconds, counter_expected_seconds COUNT; counter_coverage_ratio NUMBER nullable; traffic_status TEXT.
 - Independently aggregate traffic by zone/gaming day and machine measures by zone/gaming day, then join. Counter expected coverage uses documented sensor scope/operating schedule, not simply row count.
 - Traffic entries count crossings, not people. Partial observations remain partial; no automatic scaling to a full day. All-offline entries are NULL.
+- No authoritative sensor schedule exists. Implemented expected coverage assumes release-wide sensor roster x full gaming-day duration, labeled counter_schedule_basis TEXT='inferred_full_day_release_roster'. Additional sensor_count COUNT and counter_missing_seconds COUNT distinguish absent feed hours from offline/partial reported hours. Missing entire sensors are not discoverable. Traffic statuses: complete/partial/offline/missing/no_sensor.
 - Checks: zone sums reconcile to machine daily; observed coverage <= expected; traffic not multiplied by machines; zero active-machine zones have zero machine totals and NULL exposure ratios.
 
 ## 8. mart_visits_month
@@ -145,6 +148,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Columns: key fields as DATE/TEXT; observed_visits, complete_visits, incomplete_visits, visits_with_gaming, winning_visits COUNT; unique_players COUNT; visit_assigned_coin_in_usd, visit_assigned_payout_usd, visit_assigned_player_net_usd, visit_assigned_pos_cash_usd MONEY; visit_assigned_theo_usd THEO; coin_in_per_visit, winner_share_complete_visits NUMBER nullable.
 - A visit belongs to the gaming month containing its first observed activity. All linked play/receipts for that observed visit follow it into that month, even if the visit crosses a month boundary. Names emphasize this is a visit cohort, not activity-month totals.
 - Winning-visit share uses complete visits with recorded gaming only; a complete non-gaming visit is not counted as a gaming break-even outcome.
+- Implemented additional complete_gaming_visits COUNT exposes that denominator. Unlinked carded POS remains in player economics and is reported in diagnostics.guest_coverage, not invented as visit spending.
 - Incomplete visits are counted and labeled; first-visit assignment outside the historical window is excluded and logged. unique_players is not additive across months or segments.
 - Checks: trips never duplicated by sessions/POS; complete + incomplete = observed; gaming visits <= observed; linked visit totals reconcile before cohort exclusions.
 
@@ -155,6 +159,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Sources: floor daily, benchmark_state_monthly, city_visitation_monthly. Property/category Missouri files are reconciliation inputs, not added to state totals again.
 - Columns: month_start DATE; property_coin_in_usd, property_house_win_usd MONEY; property_active_machine_days COUNT; property_coin_in_per_machine_day NUMBER nullable; missouri_coin_in_usd, missouri_house_win_usd MONEY nullable; las_vegas_visitor_volume COUNT nullable; property_coin_in_index, missouri_coin_in_index, las_vegas_visitors_index NUMBER nullable; missouri_status, visitation_status TEXT; missouri_source_url, visitation_source_url, source_revision, as_of_limitation TEXT nullable.
 - Index = month value / first observed January value * 100; zero/missing base gives NULL. Do not fill missing source months or infer seasonality from six points.
+- Implemented source mappings: Missouri handle_usd -> coin-in, agr_usd -> reported adjusted-gross-receipts house-win comparison; LVCVA visitor_volume -> visitors. Additional index_base_month DATE, property_observed_days COUNT, property_period_complete FLAG and nullable missouri_retrieved_date DATE document baseline/coverage. Property indices require complete current and January months; no first-available-month fallback. source_revision/as_of_limitation refer to LVCVA.
 - Checks: month joins one-to-one; source quantities/units verified before mapping to coin-in/house-win fields; no duplicated benchmark totals. If source lacks a measure, leave NULL with status, never substitute another measure.
 
 ## 10. mart_tickets
@@ -167,6 +172,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Before/after: seven complete gaming dates before opening and after the gaming date containing availability; use active days, flag overlapping faults, moves/config changes and truncated windows. These comparisons are associations.
 - controllable_fault means event_type = fault_repair; it identifies the intervention category, not a proven preventable fraction.
 - Checks: nonnegative elapsed durations; response + repair = total for completed tickets; costs counted once; outage duration is not additive across overlapping tickets.
+- Stage 5 adds truncated_window, context_changed and overlapping_faults FLAG fields. theo_rate_change is an absolute dollars-per-available-hour difference, not a relative percentage. Only tickets overlapping the selected horizon are included; original timestamps/costs are preserved.
 
 ## 11. mart_downtime_hourly
 
@@ -181,6 +187,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Hours with no reported downtime have estimated losses zero; unavailable methods on outage hours are NULL. Hidden downtime is a candidate flag and is not automatically added to measured downtime/losses.
 - Validate through held-out fake outages; report MAE, sample sizes and coverage in diagnostics. Gross loss estimates are not net floor losses. A displacement-adjusted floor-loss estimate requires separate supporting analysis and will not be silently assumed.
 - Checks: hourly meters reconcile to machine_day; durations bounded and partitioned; UTC keys unique through DST; uncertainty bounds ordered. Peer windows/thresholds remain review items.
+- Stage 5 adds hour_band and reference_hours COUNT, usual_coin_in_rate_ratio NUMBER nullable, ticket_overlap_seconds and unexplained_downtime_seconds COUNT, and hidden_downtime_status, uncertainty_status, outage_attribution_status TEXT. Ticket overlap is de-duplicated and capped by measured downtime; excess stays labeled. Error bounds are empirical pseudo-outage scenarios, not confidence intervals. Busy-peer threshold is a configurable occupancy fraction and remains unset by default. Staffing is rostered context, not idle capacity, and is not additive across machines.
 
 ## 12. mart_player_month
 
@@ -190,12 +197,13 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Columns: player_id ID; month_start DATE; home_region, age_band, opening_tier, tier_end TEXT (Unknown allowed); observed_visits, incomplete_visits, sessions COUNT; carded_play_hours NUMBER; tracked_coin_in_usd, tracked_payout_usd, tracked_net_usd, actual_tracked_loss_usd MONEY; theo_usd, luck_residual_usd THEO; linked_pos_cash_usd, linked_pos_cogs_usd, comp_face_value_usd, comp_cost_usd, tracked_contribution_usd MONEY; comps_redeemed, points_earned, points_redeemed COUNT; winner_flag, above_expected_loss_flag FLAG nullable.
 - Keep source monthly tier_end as an attribute, not as an event-time tier. Monthly player net/luck formulas match source definitions. Protective flag threshold remains a review choice and cannot be used as a claim of harm.
 - Full-window concentration/winner shares must first aggregate by player across selected months. Do not sum monthly distinct players or average monthly winner flags.
+- Stage 4 adds protective_status TEXT; above_expected_loss_flag is NULL until configured and implemented. diagnostics.player_outcomes reports fixed-window winners and gross-positive-loss concentration separately from signed net results.
 - Checks: source row count and totals reconcile; loss = -net; contribution reconciles without deducting comp twice; compare gaming totals to carded machine meters, with any coverage exceptions reported.
 
 ## 13. mart_comps_tier_month
 
 - Purpose: additive cohort comparison of monthly comp economics and balances.
-- Grain/key: (opening_tier, month_start). PROPOSED: use the player's opening tier as a fixed cohort, not tier at redemption. This gives gaming, POS, ledger and balances one consistent attribution rule.
+- Grain/key: (opening_tier, month_start). IMPLEMENTED: use the player's opening tier as a fixed cohort, not tier at redemption. This gives gaming, POS, ledger and balances one consistent attribution rule.
 - Sources: player month, players, sessions, ledger and POS independently aggregated before joins.
 - Columns: opening_tier TEXT; month_start DATE; cohort_players, active_players COUNT; group C; policy_change_candidate FLAG nullable; comparison_status TEXT.
 - Include all opening-tier cohorts for every month, including cohorts with zero monthly activity but nonzero point balances. cohort_players counts enrolled accounts at month end; active_players counts accounts with gaming/POS/ledger activity that month.
@@ -212,6 +220,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - Actual loss is from sessions, not prorated from player_period. Comp cost comes from ledger redemptions, reconciled to POS economic costs. Capture any linked non-POS benefit coverage separately in diagnostics rather than assuming all benefits are receipts.
 - Comp change candidates require evidence in both cost/coin-in and cost/actual-loss series and valid denominators; do not automatically label a pricing/policy cause. Test method, minimum window and thresholds remain review choices.
 - Checks: daily summed economics reconcile to monthly source totals on the same activity-month basis; daily balances carry forward. Balance snapshots and active player counts are non-additive over dates.
+- Stage 4 preserves policy_change_candidate=NULL with explicit configuration status. Whole-month, single-year builds are required for source player-month reconciliation. Unsupported non-POS redemption links fail validation; all supplied redemptions have verified matching POS links.
 
 ## 15. mart_forecast
 
@@ -257,6 +266,6 @@ Performance target: SQL aggregates execute inside DuckDB. Python receives machin
 5. Set downtime reference windows and hidden-downtime rule. Proposed first pass: +/- 28 dates in the same placement/configuration and local hour band, >= 3 eligible other-bank peers; >= 3 consecutive available zero-play hours with busy peers is a candidate. Busy-peer threshold and minimum healthy observations still need calibration.
 6. Approve alpha = 0.05, two-sided CLT tests with BH across each declared family; seeded 10,000-replicate block intervals as sensitivity checks. Stratification/dependence diagnostics cannot be reduced to a near-zero correlation test.
 7. Approve classification as overlapping evidence flags plus mixed/insufficient outcomes; no automatic replacement verdict from a p-value alone.
-8. Resolve property contribution/tech labor inclusion against source semantics; verify weather units and benchmark column meanings before final field mapping.
+8. Resolved in stage 3: property contribution subtracts tech labor once; weather tmax_c/prcp_mm are Celsius/mm; Missouri handle/AGR and LVCVA visitor_volume mappings are documented in sections 6 and 9.
 9. Choose/document comp change detection (window sizes, effect size and multiplicity) before creating policy-change flags. No fitted thresholds are implied by this draft.
 10. Approve all 14 outputs, including machine-hour and player-level marts which will be larger than the other exports. Recommendation benefits remain configurable assumptions until supported by analysis.

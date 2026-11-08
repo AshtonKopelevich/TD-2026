@@ -54,4 +54,4 @@ def validate_sources(con, dataset, manifest, inventory, verify_hashes=False, con
                   {"key": list(contract.key), "null_rows": nulls, "duplicate_groups": duplicates})
     return {"passed": all(c["passed"] for c in checks), "checks": checks,
             "hashes_verified": verify_hashes,
-            "scope": "Manifest row counts/bytes, declared keys, and minimum required schemas. No mart or accounting validation yet."}
+            "scope": "Source manifest row counts/bytes, declared keys, and required column/type schemas."}

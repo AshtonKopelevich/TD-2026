@@ -101,7 +101,7 @@ def test_publication_is_standalone_and_failed_rebuild_preserves_previous(tmp_pat
     monkeypatch.setattr(build, 'validate_sources', lambda *args: {
         'passed': True, 'checks': [], 'hashes_verified': False, 'scope': 'Synthetic inputs.'})
     output = tmp_path / 'output'
-    assert build.run(dataset, output)['passed']
+    assert build.run(dataset, output, stage=2)['passed']
     path = output / 'casino.duckdb'
     before = path.read_bytes()
     # Read-only connection has no raw/staging views or filesystem dependencies.
@@ -116,7 +116,7 @@ def test_publication_is_standalone_and_failed_rebuild_preserves_previous(tmp_pat
         return []
 
     monkeypatch.setattr(build, 'register_sources', bad_register)
-    assert not build.run(dataset, output)['passed']
+    assert not build.run(dataset, output, stage=2)['passed']
     assert path.read_bytes() == before
     assert not list(output.glob('.casino-build-*'))
 
@@ -129,7 +129,7 @@ def test_publication_is_standalone_and_failed_rebuild_preserves_previous(tmp_pat
         return original_replace(self, target)
 
     monkeypatch.setattr(Path, 'replace', locked_replace)
-    failed = build.run(dataset, output)
+    failed = build.run(dataset, output, stage=2)
     assert not failed['passed']
     assert failed['checks'][-1]['check'] == 'database.publication'
     assert path.read_bytes() == before
