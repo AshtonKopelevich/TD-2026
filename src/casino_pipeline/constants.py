@@ -1,0 +1,41 @@
+"""Analysis defaults, not guarantees of statistical validity.
+
+None means uncalibrated: dependent analytical flags must remain unavailable.
+Source/output paths are CLI arguments rather than analytical constants.
+"""
+
+ANALYSIS_START = "2025-01-01"
+ANALYSIS_END = "2025-06-30"
+FORECAST_START = "2025-07-01"
+FORECAST_END = "2025-07-30"
+LOCAL_TIMEZONE = "America/Los_Angeles"
+GAMING_DAY_START_HOUR = 6
+EXPECTED_SOURCE_RELEASE = "0.9.0-draft"
+
+MIN_ACTIVE_DAYS = 60
+MIN_POSITIVE_WAGER_DAYS = 30
+MIN_USABLE_BOOTSTRAP_BLOCKS = 8
+BOOTSTRAP_BLOCK_DAYS = 7
+BOOTSTRAP_REPLICATES = 10_000
+RANDOM_SEED = 42
+ALPHA = 0.05
+WEAK_DEMAND_RELATIVE_GAP = 0.20
+DOWNTIME_SHARE_TRIGGER = 0.05
+
+DOWNTIME_REFERENCE_DAYS = 28
+MIN_OTHER_BANK_PEERS = 3
+MIN_HEALTHY_MATCHED_HOURS = 20
+HIDDEN_DOWNTIME_CONSECUTIVE_HOURS = 3
+BUSY_PEER_THRESHOLD = None
+MIN_PEER_COVERAGE_DAYS = None
+PROTECTIVE_LOSS_THRESHOLD = None
+
+COMP_COMPARISON_WINDOW_DAYS = 28
+COMP_MIN_RELATIVE_CHANGE = 0.20
+COMP_MIN_DENOMINATOR = None
+COMP_CHANGE_METHOD = None
+
+
+def analytical_defaults():
+    """JSON-serializable snapshot for each build manifest."""
+    return {name: value for name, value in globals().items() if name.isupper()}
