@@ -10,9 +10,9 @@ def quote_identifier(name):
 
 
 @contextmanager
-def build_connection():
+def build_connection(path=":memory:"):
     """Source views are temporary build inputs, never published dependencies."""
-    con = duckdb.connect(":memory:")
+    con = duckdb.connect(str(path))
     try:
         con.execute("SET TimeZone = 'UTC'")
         for schema in ("raw", "staging", "marts", "diagnostics", "metadata"):

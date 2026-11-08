@@ -13,7 +13,7 @@ def test_reports_match_and_no_empty_database_published(tmp_path, tiny_source, mo
     monkeypatch.setattr(build, "register_sources", lambda c, d: original_register(c, d, [contract]))
     monkeypatch.setattr(build, "validate_sources", lambda c, d, m, i, h: original_validate(c, d, m, i, h, [contract]))
     output = tmp_path / "output"
-    result = build.run(dataset, output, verify_hashes=True)
+    result = build.run(dataset, output, verify_hashes=True, sources_only=True)
     assert result["passed"]
     latest = json.loads((output / "reports" / "latest.json").read_text())
     report_dir = output / "reports" / "runs" / latest["build_id"]
