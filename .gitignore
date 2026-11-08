@@ -1,2 +1,5 @@
 .codex
 .venv
+marts_placeholder/
+casino.duckdb
+casino.duckdb.tmp
