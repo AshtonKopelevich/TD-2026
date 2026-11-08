@@ -1,8 +1,18 @@
 # Action proposal configuration
 
 The pipeline prices a proposed portfolio; it does not infer causal effects or
-automatically choose actions. The default config/action_proposals.csv contains
-only a header, yielding a typed empty mart and $100,000 unallocated.
+automatically choose actions. The checked-in config/action_proposals.csv contains
+27 selected lines: ten leased replacements, eleven inspections, three manufacturer
+maintenance sweeps, Back Forty signage, an expanded survey and a promotion weekend.
+Cash cost is exactly $100,000 with no reserve. The working plan has six action types;
+the type cap is disabled per user instruction. Catalogue quantities, budget and
+target conflicts remain enforced. The official challenge guide still specifies
+three types for submission. See [action evidence](action_evidence.md).
+
+Regenerate the proposals from the published marts with
+`python -m casino_pipeline.propose_actions`, then publish through `python run_all.py`.
+An intentionally empty CSV still yields a valid empty mart; this configuration
+state is not evidence against taking action.
 
 Copy that file and pass `--action-proposals path/to/file.csv`, or populate it
 directly. All monetary inputs are plain dollar amounts without currency symbols.

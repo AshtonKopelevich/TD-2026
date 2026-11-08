@@ -1,6 +1,6 @@
 # Proposed mart contracts
 
-Status: all fourteen marts and the stage-eight artifact/export/handoff tooling are implemented. The action mart is intentionally empty until proposals are configured. Protective/comp-change flags remain unavailable until configured and implemented. Hidden-downtime detection requires a configured busy-peer threshold. Current verification/consumer status is in output/reports/handoff.md.
+Status: all fourteen marts and the stage-eight artifact/export/handoff tooling are implemented. The action mart contains the configured July pilot portfolio; see action_evidence.md and action_proposals.md. Protective/comp-change flags remain unavailable until configured and implemented. Hidden-downtime detection requires a configured busy-peer threshold. Current verification/consumer status is in output/reports/handoff.md.
 Scope: the 14 marts in Dashboard_Royale_Team_Plan_v2.pdf. No presentation-tool requirements.
 Source root: dashboard-royale-main/data/. Source files remain unchanged.
 
@@ -246,7 +246,7 @@ Source redeemable points start at zero each year; opening_lifetime_points is NOT
 - benefit_before_action_cost is incremental expected contribution after ongoing machine costs and operational downtime, BEFORE proposal costs. net_benefit subtracts total_cost once. Maintain a cost-component reconciliation to avoid double-counting lease/service expenses in both places.
 - low/high are explicit assumption or validated error scenarios, not automatically 95% confidence intervals. NULL benefit is valid for inspection/information actions. Half-effect scenario = 0.5 * benefit_before_action_cost - total_cost.
 - Forecast supplies a floor-level no-action reference; allocating it to a target requires an explicit allocation assumption. Forecast alone does not estimate intervention uplift.
-- Checks: selected portfolio <= $100,000 and <= 3 distinct action types (keep-budget choice excluded); catalogue quantity limits apply across all selected rows; enforce incompatibilities/target conflicts; nonnegative quantities/costs; horizon is July 1-30. Empty proposals yield a valid empty mart with schema and an explicit unallocated budget report, not invented recommendations.
+- Checks: selected portfolio <= $100,000; working-plan action-type cap is disabled per user instruction (official submission guide: 3 types). Catalogue quantity limits apply across all selected rows; enforce incompatibilities/target conflicts; nonnegative quantities/costs; horizon is July 1-30. Empty proposals yield a valid empty mart with schema and an explicit unallocated budget report, not invented recommendations.
 - Stage 7 adds benefit_days_per_unit NUMBER; affected_machine_count COUNT; nullable downtime_opportunity_cost_usd_per_hour and forecast_no_action_coin_in_usd MONEY; nullable forecast_allocation_share NUMBER; unit_start_dates/cost_assumption TEXT. Uplift scenarios are per unit/day before proposal charges, reduced for downtime and explicit duration. Active target membership, quantity/incompatibility expansion and configuration snapshots are recorded. See docs/action_proposals.md for input rules and limitations.
 
 ## 17. Validation and acceptance

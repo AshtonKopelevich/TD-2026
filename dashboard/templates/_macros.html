@@ -1,0 +1,11 @@
+{% macro rail(items, label="Key figures", small=false) %}
+<dl class="rail{% if small %} rail-small{% endif %}" aria-label="{{ label }}">
+  {% for t in items %}
+  <div class="rail-item{% if t.tone %} tone-{{ t.tone }}{% endif %}">
+    <dt>{{ t.label }}</dt>
+    <dd class="rail-value">{{ t.value }}</dd>
+    {% if t.sub %}<dd class="rail-sub">{{ t.sub }}</dd>{% endif %}
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}

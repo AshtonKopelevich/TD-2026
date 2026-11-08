@@ -19,7 +19,7 @@ Currently available:
 | `marts.mart_downtime_hourly` | machine_id, hour_start_utc | 1,321,908 |
 | `marts.mart_machine_scorecard` | machine_id | 310 |
 | `marts.mart_forecast` | forecast_date | 211 |
-| `marts.mart_actions` | proposal_line_id | 0 with empty config |
+| `marts.mart_actions` | proposal_line_id | 27 selected proposal lines |
 
 `metadata.mart_columns` lists column types
 and nullability. `metadata.build_manifest` and `diagnostics.validation` store JSON
@@ -242,7 +242,8 @@ GROUP BY opening_tier;
   Proposal charges must not also be deducted in the input uplift scenario.
 - Bank/manufacturer downtime expands to affected active machines. Target conflicts
   expand bank/machine scopes, and comp-policy alternatives are mutually exclusive.
-  Quantities are limited across selected rows, with at most three funded types.
+  Quantities are limited across selected rows. The working-plan type cap is disabled;
+  the official challenge guide's three-type submission rule remains documented.
 - `forecast_no_action_coin_in_usd` is optional context using an explicit allocation
   share. It does not identify intervention uplift or net contribution. Scenario
   benefit ranges are not confidence intervals. Information-only actions may retain

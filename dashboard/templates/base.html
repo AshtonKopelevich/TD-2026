@@ -22,8 +22,8 @@
       <span class="brand-card" aria-hidden="true"><b>A</b><i>♠</i></span>
       <span class="brand-name">The Gilded Ace<small>Slot floor review, January to June 2025</small></span>
     </a>
-    <nav aria-label="Chapters">
-      <a class="case-link" href="{{ url_for('case') }}" {% if active == 'case' %}aria-current="page"{% endif %}>The case</a>
+    <nav aria-label="Dashboard pages">
+      <a class="case-link" href="{{ url_for('case') }}" {% if active == 'case' %}aria-current="page"{% endif %}>Overview</a>
       <ol class="chapter-nav">
         {% for ep, title, tag, question in chapters %}
         <li><a href="{{ url_for(ep) }}{{ f.qs() }}" {% if ep == active %}aria-current="page"{% endif %}>

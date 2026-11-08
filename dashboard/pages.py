@@ -826,136 +826,17 @@ def _evidence_links(refs: str, f: Filters) -> Markup:
 def plan_story(a: pd.DataFrame | None = None) -> str:
     a = _actions() if a is None else a
     if a.empty:
-        return f"Keep the full {fmt_money(BUDGET)}: no action has evidence strong enough to fund yet."
+        return "No July action portfolio is configured yet."
     spent = a.total_cost_usd.sum()
     types = a.action_type_id.nunique()
-    net, half = a.net_benefit_usd.sum(min_count=1), a.half_effect_net_benefit_usd.sum(min_count=1)
-    s = f"Fund {plural(types, 'action type')} for {fmt_money(spent)} and keep {fmt_money(BUDGET - spent)}."
-    if pd.notna(net):
-        s += (f" Expected net benefit is {fmt_money(net)}; at half the assumed effect the plan "
-              f"{'still nets' if half >= 0 else 'would lose'} {fmt_money(abs(half))}.")
+    s = (f"Allocate the full {fmt_money(spent)} to {plural(types, 'action type')}." if spent==BUDGET else
+         f"Allocate {fmt_money(spent)} to {plural(types, 'action type')} and reserve {fmt_money(BUDGET-spent)} for follow-up decisions.")
     return s
 
 
 def plan(f: Filters) -> dict:
-    a = _actions()
-    spent = a.total_cost_usd.sum()
-    kept = BUDGET - spent
-    by = a.groupby(["action_type_id", "name", "full_name"], sort=False).agg(
-        lines=("proposal_line_id", "count"), qty=("quantity", "sum"), cost=("total_cost_usd", "sum"),
-        net=("net_benefit_usd", lambda s: s.sum(min_count=1)), low=("benefit_low_usd", lambda s: s.sum(min_count=1)),
-        high=("benefit_high_usd", lambda s: s.sum(min_count=1)),
-        half=("half_effect_net_benefit_usd", lambda s: s.sum(min_count=1)),
-        lead=("lead_days", "max"), days=("effective_operating_days", "max"), down=("action_downtime_hours", "sum"),
-        targets=("target_id", lambda s: ", ".join(map(str, s))), target_type=("target_type", "first"),
-        metric=("measurement_metric", "first"), control=("control_definition", "first"),
-        limitation=("limitation", "first"), assumption=("effect_assumption", "first"),
-        refs=("evidence_refs", lambda s: ";".join(s.dropna())), status=("benefit_status", "first")).reset_index()
-
-    fig = figure(height=170, barmode="stack")
-    for i, r in enumerate(by.itertuples()):
-        fig.add_trace(go.Bar(y=["Budget"], x=[r.cost], name=r.name, orientation="h",
-                             marker=dict(color=SERIES[i % 8], line=dict(color=SURFACE, width=2)),
-                             hovertemplate=f"{html.escape(r.name)}: %{{x:$,.0f}}<extra></extra>"))
-    fig.add_trace(go.Bar(y=["Budget"], x=[max(kept, 0)], name="Kept", orientation="h",
-                         marker=dict(color=BAND, line=dict(color=SURFACE, width=2)),
-                         hovertemplate="Kept: %{x:$,.0f}<extra></extra>"))
-    fig.update_layout(xaxis=dict(range=[0, max(BUDGET, spent)], tickprefix="$", tickformat="~s", showgrid=True,
-                                 gridcolor=GRID),
-                      yaxis=dict(visible=False), margin=dict(t=36, b=4, l=4, r=12), legend_traceorder="normal")
-    budget = Chart("plan-budget", "Where the $100,000 goes", fig, "mart_actions", wide=True)
-
-    with_benefit = by.dropna(subset=["net"])
-    fig2 = figure(height=80 + 70 * max(len(with_benefit), 1))
-    fig2.add_vline(x=0, line_color=AXIS, line_width=1)
-    fig2.add_trace(go.Scatter(x=with_benefit.net, y=with_benefit.name, mode="markers", name="Expected net benefit",
-                              marker=dict(color=BLUE, size=12, line=dict(color=SURFACE, width=2)),
-                              error_x=dict(type="data", symmetric=False, array=with_benefit.high - with_benefit.net,
-                                           arrayminus=with_benefit.net - with_benefit.low, color=BLUE, thickness=2,
-                                           width=6),
-                              customdata=with_benefit[["cost", "low", "high"]],
-                              hovertemplate="<b>%{y}</b><br>Net %{x:$,.0f} after a %{customdata[0]:$,.0f} cost"
-                                            "<br>Range %{customdata[1]:$,.0f} to %{customdata[2]:$,.0f}<extra></extra>"))
-    fig2.add_trace(go.Scatter(x=with_benefit.half, y=with_benefit.name, mode="markers", name="At half the effect",
-                              marker=dict(color=ORANGE, size=11, symbol="diamond", line=dict(color=SURFACE, width=2)),
-                              hovertemplate="<b>%{y}</b> at half the effect: %{x:$,.0f}<extra></extra>"))
-    money_axis(fig2, "xaxis", "Net benefit over July, after cost")
-    fig2.update_layout(xaxis=dict(showgrid=True, gridcolor=GRID), yaxis=dict(showgrid=False, autorange="reversed"))
-    payoff = Chart("plan-payoff", "What each action should return", fig2, "mart_actions", wide=True,
-                   subtitle="Dots are the estimate, bars the low-to-high scenarios, diamonds the plan with "
-                            "half the assumed effect. Information-only actions, like inspections, have no "
-                            "dollar estimate and aren't shown.")
-
-    rows = []
-    for r in by.itertuples():
-        rows.append({
-            "Action": r.full_name, "Targets": f"{r.target_type}: {r.targets}", "Units": int(r.qty),
-            "Cost": fmt_money(r.cost), "Live days in July": fmt_num(r.days),
-            "Net benefit": fmt_money(r.net) if pd.notna(r.net) else "Information only",
-            "Range": f"{fmt_money(r.low)} to {fmt_money(r.high)}" if pd.notna(r.low) else "–",
-            "At half effect": fmt_money(r.half) if pd.notna(r.half) else "–",
-            "Assumption": r.assumption, "How we'll measure it": r.metric, "Compared against": r.control,
-            "Limitation": r.limitation, "Evidence": _evidence_links(r.refs, f)})
-    plan_html = _cards(rows)
-
-    cat = action_catalog()
-    limits = dict(zip(cat.action_type_id, cat.quantity_limit)) if not cat.empty else {}
-    groups = dict(zip(cat.action_type_id, cat.incompatibility_group)) if not cat.empty else {}
-    over = [f"{r.name} ({int(r.qty)} of {int(limits[r.action_type_id])})" for r in by.itertuples()
-            if r.action_type_id in limits and r.qty > limits[r.action_type_id]]
-    same = a[a.action_type_id.map(groups).eq("same_machine")]
-    clashes = same.groupby("target_id").action_type_id.nunique()
-    clashes = list(clashes[clashes > 1].index)
-    comp_both = {"A-COMP-PILOT", "A-COMP-CHANGE"} <= set(a.action_type_id)
-    horizon_ok = (pd.Timestamp(a.horizon_start.min()) >= pd.Timestamp("2025-07-01")
-                  and pd.Timestamp(a.horizon_end.max()) <= pd.Timestamp("2025-07-30")) if len(a) else True
-    checks = [
-        (spent <= BUDGET, f"Spends {fmt_money(spent)} of {fmt_money(BUDGET)}"),
-        (by.action_type_id.nunique() <= MAX_ACTION_TYPES,
-         f"{plural(by.action_type_id.nunique(), 'action type')}, limit {MAX_ACTION_TYPES}"),
-        (not over, "Within catalogue quantity limits" if not over else "Over the limit: " + ", ".join(over)),
-        (not clashes, "No machine is both moved and replaced" if not clashes
-         else "Conflicting actions on " + ", ".join(clashes)),
-        (not comp_both, "Comp pilot and floor-wide comp change aren't combined"),
-        (horizon_ok, "Every action runs inside July 1–30"),
-    ]
-    check_html = Markup('<ul class="checks">' + "".join(
-        f'<li class="{"ok" if ok else "fail"}"><span aria-hidden="true">{"✓" if ok else "✕"}</span>'
-        f'<span class="sr">{"Passes" if ok else "Fails"}: </span>{html.escape(txt)}</li>'
-        for ok, txt in checks) + "</ul>")
-
-    lines = a[["proposal_line_id", "name", "target_type", "target_id", "quantity", "lead_days",
-               "effective_operating_days", "action_downtime_hours", "total_cost_usd", "net_benefit_usd",
-               "benefit_status"]]
-    lines.columns = ["Line", "Action", "Target type", "Target", "Qty", "Lead days", "Live days", "Downtime (h)",
-                     "Cost", "Net benefit", "Status"]
-    net, half = a.net_benefit_usd.sum(min_count=1), a.half_effect_net_benefit_usd.sum(min_count=1)
-    return {
-        "headline": plan_story(a),
-        "lede": "Each action answers a cause found in an earlier chapter, and its evidence links back there. "
-                "Costs follow the catalogue: unit cost plus daily cost for the July days left after lead time.",
-        "rail": [
-            tile("Spent", fmt_money(spent), f"of {fmt_money(BUDGET)}", "pos" if spent <= BUDGET else "neg"),
-            tile("Kept", fmt_money(kept), "Keeping money is a valid choice"),
-            tile("Action types", f"{by.action_type_id.nunique()} of {MAX_ACTION_TYPES}", "Most we may fund"),
-            tile("Expected net benefit", fmt_money(net) if pd.notna(net) else "–",
-                 f"{fmt_money(a.benefit_low_usd.sum(min_count=1))} to {fmt_money(a.benefit_high_usd.sum(min_count=1))}"),
-            tile("At half the effect", fmt_money(half) if pd.notna(half) else "–", "Sensitivity",
-                 "pos" if pd.notna(half) and half >= 0 else "neg"),
-        ],
-        "sections": [
-            {"charts": [budget, payoff]},
-            {"title": "The actions", "blocks": [plan_html], "source": "mart_actions, names from action_catalog"},
-            {"title": "Plan checks", "blocks": [check_html], "source": "mart_actions, action_catalog"},
-            {"title": "Every proposal line", "source": "mart_actions",
-             "blocks": [table(lines, {"Cost": fmt_money, "Net benefit": fmt_money, "Live days": fmt_num,
-                                      "Downtime (h)": lambda v: fmt_num(v, 1)},
-                              {"Target": lambda r: machine_link(f)(r.Target) if r["Target type"] == "machine" else ""})]},
-        ],
-        "meaning": "We judge each action on July theo against the forecast and a control group, not on "
-                   "house win: thirty days of house win is too noisy to tell an action from luck.",
-        "no_filters": True,
-    }
+    from .action_plan import build
+    return build(f)
 
 
 def _cards(rows: list[dict]) -> Markup:
@@ -975,26 +856,5 @@ def _cards(rows: list[dict]) -> Markup:
 # The case (opening page)
 # =========================================================================================
 def case() -> dict:
-    f = Filters()
-    sc = scorecard(f)
-    naive = sc[sc.naive_bottom_10].sort_values("naive_rank")
-    spots = []
-    for i, name in enumerate(SPOTS):
-        chips = naive[naive.spot == name]
-        # Spots sit on an arc like the betting circles on a blackjack table (SVG viewBox 1000 x 480).
-        theta = np.radians(152 - i * (124 / (len(SPOTS) - 1)))
-        spots.append({"name": name, "note": SPOT_NOTES[name], "machine": name in MACHINE_SPOTS,
-                      "x": round((500 + 380 * np.cos(theta)) / 10, 2),
-                      "y": round((40 + 300 * np.sin(theta)) / 4.8, 2),
-                      "chips": [{"id": r.machine_id, "label": r.label, "href": f"/machines/{r.machine_id}"}
-                                for r in chips.itertuples()]})
-    head, meaning, _ = verdict_story(sc)
-    stories = {
-        "verdict": head, "machines": machines_story(f), "demand": demand_story(f),
-        "downtime": downtime_story(f), "guests": guests_story(f), "forecast": forecast_story(),
-        "plan": plan_story(),
-    }
-    chapters = [{"num": i + 1, "endpoint": ep, "title": title, "tag": tag, "question": q, "story": stories[ep]}
-                for i, (ep, title, tag, q) in enumerate(CHAPTERS)]
-    return {"spots": spots, "headline": head, "meaning": meaning, "chapters": chapters,
-            "machine_count": int(sc.machine_id.nunique())}
+    from .overview import build
+    return build()

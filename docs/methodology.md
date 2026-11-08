@@ -273,8 +273,9 @@ action downtime separately; proposal cash costs are subtracted once. Scenario
 assumptions must exclude charges already present in the proposal budget. These
 benefits are not statistical effect estimates or confidence intervals.
 
-Selected portfolios must stay within $100,000 and three action types, excluding
-preserved funds. Catalogue quantities aggregate across selected rows. Move and
+Selected portfolios must stay within $100,000. The working-plan type cap is disabled
+per user instruction; the official challenge guide specifies three types for submission.
+Catalogue quantities aggregate across selected rows. Move and
 replacement conflicts expand bank membership; comp policy alternatives conflict
 globally. Promotion dates and durations must respect lead times and cannot overlap.
 Unknown information benefits remain NULL. Forecast target allocation requires an

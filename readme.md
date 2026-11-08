@@ -182,7 +182,7 @@ no source-file views. The default release produces 55,092 machine-days, excludin
 | `marts.mart_downtime_hourly` | Installed machine x UTC hour | 1,321,908 |
 | `marts.mart_machine_scorecard` | Machine, fixed analysis window | 310 |
 | `marts.mart_forecast` | Historical/forecast date | 211 |
-| `marts.mart_actions` | Configured proposal x target | 0 with empty default config |
+| `marts.mart_actions` | Configured proposal x target | 27 selected proposal lines |
 
 Full-window CLT tests require 60 active and 30 positive-wager dates; monthly tests
 require 21 and 14. BH correction is separate for the full-window family and each
@@ -224,9 +224,14 @@ candidate errors, coefficients, feature cutoffs, frozen predictions and weekday 
 Only calendar/advance-announced events are inputs; no weather or later tourism data.
 July holiday flags are explicitly configured for this horizon (July 4).
 
-`config/action_proposals.csv` is empty by default: no funded recommendations or
-causal benefits are invented. `diagnostics.action_portfolio` reports the full
-$100,000 unallocated; `metadata.action_catalog` retains all 13 catalogue options.
+`config/action_proposals.csv` allocates all $100,000 across ten leased replacements,
+eleven inspections, three manufacturer maintenance sweeps, Back Forty signage,
+an expanded survey and one promotion weekend. The working plan has six action
+types and no type cap; catalogue quantity limits and conflicts still apply.
+The official challenge guide specifies three types for submission. Benefits are explicit scenarios or unpriced
+information outcomes, not established causal effects. Evidence and controls are in
+[action evidence](docs/action_evidence.md). `metadata.action_catalog` retains all
+13 catalogue options.
 See [proposal configuration](docs/action_proposals.md) for scenario fields and rules.
 Use another file with `uv run python run_all.py --action-proposals path/to/actions.csv`.
 
@@ -279,7 +284,8 @@ diagnostics; `analysis/downtime.py` builds outage evidence; `analysis/machines.p
 builds statistical evidence. `model/forecast.py` controls chronological fitting and
 freezing; `actions.py` validates and prices explicit proposals. `handoff.py` inspects
 published artifacts and `export.py` streams optional CSV/Parquet exports.
-`config/action_proposals.csv` starts empty; no recommendations are fabricated.
+`propose_actions.py` generates the evidence-linked portfolio in
+`config/action_proposals.csv`; the standard pipeline validates and prices it.
 
 See [mart contracts](docs/mart_contracts.md), [methodology](docs/methodology.md)
 and [app handoff](docs/app_handoff.md). Generated output is ignored by Git.

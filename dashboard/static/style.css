@@ -254,6 +254,13 @@ main { padding: 18px 44px 72px; max-width: 1340px; width: 100%; }
 .forecast-pipeline span { margin: 4px 0; font-size: 14px; }
 .forecast-pipeline small { color: var(--ink-2); font-size: 12px; }
 .forecast-validation p { font-size: 13px; max-width: 85ch; color: var(--ink-2); }
+.action-targets { font-weight: 600; margin: 10px 0; }
+.proposal-evidence { margin-top: 16px; }
+.proposal-detail { margin-top: 16px; }
+.proposal-detail h4 { margin: 0 0 10px; font-size: 13px; }
+.proposal-detail dl { display: block; }
+.proposal-detail dt { margin-top: 12px; font-weight: 600; }
+.proposal-detail dd { margin-top: 4px; overflow-wrap: anywhere; }
 .source { margin: 0; font-size: 12px; color: var(--ink-3); }
 .block .source { margin-top: 10px; }
 summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
@@ -332,6 +339,41 @@ summary:hover { color: var(--ink); }
 .checks .fail { color: var(--neg); }
 
 /* ---------- the case: a blackjack layout ---------- */
+.overview-head { padding: 24px 0 22px; }
+.overview-head h1 { font: 500 44px/1.1 var(--display); color: var(--chalk); }
+.overview-kicker { margin: 0 0 8px; font-size: 12px; color: var(--gold); text-transform: uppercase; letter-spacing: .1em; }
+.overview-targets { padding-top: 8px; }
+.overview-targets .arc-title { font-size: 30px; }
+.overview-targets .arc-sub { font-size: 17px; }
+.target-spots .spot { width: 7%; }
+.target-chip-link { display: block; color: inherit; text-decoration: none; border-radius: 50%; }
+.target-chip-link .spot-ring { display: block; border-style: solid; }
+.target-chip-link:hover .spot-ring, .target-chip-link:focus-visible .spot-ring { border-color: var(--chalk); box-shadow: 0 0 18px rgba(201,164,86,.25); }
+.target-chip-link .casino-chip { display: grid; place-items: center; left: 10%; top: 10%; width: 80%; }
+.target-chip-link .casino-chip b { font: 700 clamp(13px, 1.5vw, 23px)/1 var(--text); color: #492316; }
+.target-chip-link .spot-name { font-size: 12px; top: calc(100% + 5px); }
+.target-chip-link .spot-count { font-size: 11px; top: calc(100% + 22px); }
+.overview-targets .table-key { margin-top: 18px; max-width: 78ch; }
+.overview-targets .cta { margin-top: 16px; }
+.overview-pages { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.overview-page { min-width: 0; text-decoration: none; border: 1px solid var(--gold-faint); border-radius: 8px; padding: 20px; background: rgba(8,33,26,.25); }
+.overview-page:hover { border-color: var(--gold); background: rgba(255,255,255,.04); }
+.overview-page h3 { display: flex; justify-content: space-between; gap: 10px; font: 500 23px/1.2 var(--display); }
+.overview-page h3 span { color: var(--gold); }
+.overview-page strong { display: block; margin-top: 12px; color: var(--gold); font-size: 16px; }
+.overview-page p { margin: 6px 0 0; color: var(--chalk-2); font-size: 13px; }
+.overview-section-head { max-width: none; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; }
+.overview-section-head a { color: var(--chalk-2); font-size: 13px; text-underline-offset: 4px; }
+@media (max-width: 760px) {
+  .overview-head h1 { font-size: 34px; }
+  .overview-targets #targets-title { position: static; width: auto; height: auto; clip: auto; overflow: visible; white-space: normal; font: 500 26px/1.2 var(--display); margin-bottom: 18px; }
+  .target-spots .spot { width: auto; }
+  .target-chip-link .spot-ring { width: 64px; }
+  .target-chip-link .casino-chip b { font-size: 22px; }
+  .target-chip-link .spot-name, .target-chip-link .spot-count { display: block; position: static; transform: none; }
+  .target-chip-link .spot-name { margin-top: 8px; }
+  .overview-targets .spots { padding-top: 12px; }
+}
 .case-hero { padding: 26px 0 10px; text-align: center; }
 .case-kicker { margin: 0 auto; max-width: 58ch; font-size: 17px; color: var(--chalk-2); }
 .case-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

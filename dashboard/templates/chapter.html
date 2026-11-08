@@ -1,17 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ page.title_override or meta.title }}, The Gilded Ace{% endblock %}
 
-{% macro rail(items, label="Key figures", small=false) %}
-<dl class="rail{% if small %} rail-small{% endif %}" aria-label="{{ label }}">
-  {% for t in items %}
-  <div class="rail-item{% if t.tone %} tone-{{ t.tone }}{% endif %}">
-    <dt>{{ t.label }}</dt>
-    <dd class="rail-value">{{ t.value }}</dd>
-    {% if t.sub %}<dd class="rail-sub">{{ t.sub }}</dd>{% endif %}
-  </div>
-  {% endfor %}
-</dl>
-{% endmacro %}
+{% from "_macros.html" import rail %}
 
 {% macro hidden(keys) %}{% for k in keys %}{% if f[k] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endif %}{% endfor %}{% endmacro %}
 
@@ -178,10 +168,10 @@
 {% if page.scope_note and not page.no_filters %}<p class="scope-note">{{ page.scope_note }}</p>{% endif %}
 
 {% if not page.back %}
-<nav class="pager" aria-label="Chapter navigation">
-  {% if meta.prev %}<a class="prev" href="{{ url_for(meta.prev.endpoint) }}{{ f.qs() }}"><small>Previous chapter</small>{{ meta.prev.num }}. {{ meta.prev.title }}</a>
-  {% else %}<a class="prev" href="{{ url_for('case') }}"><small>Back to</small>The case</a>{% endif %}
-  {% if meta.next %}<a class="next" href="{{ url_for(meta.next.endpoint) }}{{ f.qs() }}"><small>Next chapter</small>{{ meta.next.num }}. {{ meta.next.title }}</a>{% endif %}
+<nav class="pager" aria-label="Dashboard navigation">
+  {% if meta.prev %}<a class="prev" href="{{ url_for(meta.prev.endpoint) }}{{ f.qs() }}"><small>Previous page</small>{{ meta.prev.num }}. {{ meta.prev.title }}</a>
+  {% else %}<a class="prev" href="{{ url_for('case') }}"><small>Back to</small>Overview</a>{% endif %}
+  {% if meta.next %}<a class="next" href="{{ url_for(meta.next.endpoint) }}{{ f.qs() }}"><small>Next page</small>{{ meta.next.num }}. {{ meta.next.title }}</a>{% endif %}
 </nav>
 {% endif %}
 {% endblock %}

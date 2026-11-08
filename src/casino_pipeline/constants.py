@@ -16,7 +16,8 @@ FORECAST_TEST_END = "2025-06-30"
 # Explicit, advance-known holiday inputs for the configured July 2025 horizon.
 FORECAST_FUTURE_HOLIDAYS = ("2025-07-04",)
 ACTION_BUDGET_USD = 100_000
-MAX_FUNDED_ACTION_TYPES = 3
+# Working-plan preference: no type cap. The official challenge guide uses three.
+MAX_FUNDED_ACTION_TYPES = None
 LOCAL_TIMEZONE = "America/Los_Angeles"
 GAMING_DAY_START_HOUR = 6
 EXPECTED_SOURCE_RELEASE = "0.9.0-draft"

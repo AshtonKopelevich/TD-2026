@@ -172,7 +172,7 @@ def validate_portfolio(rows,catalog,target_sets):
     selected = [r for r in rows if r['selected']]
     if sum(r['total_cost_usd'] for r in selected)>Decimal(c.ACTION_BUDGET_USD):
         raise ValueError('Selected portfolio exceeds budget')
-    if len({r['action_type_id'] for r in selected if r['action_type_id']!='A-HOLD'})>c.MAX_FUNDED_ACTION_TYPES:
+    if c.MAX_FUNDED_ACTION_TYPES is not None and len({r['action_type_id'] for r in selected if r['action_type_id']!='A-HOLD'})>c.MAX_FUNDED_ACTION_TYPES:
         raise ValueError('Selected portfolio exceeds action-type limit')
     for action_id in {r['action_type_id'] for r in selected}:
         if sum(r['quantity'] for r in selected if r['action_type_id']==action_id)>catalog[action_id]['quantity_limit']:
@@ -260,7 +260,8 @@ def build_actions(con,proposal_path):
 def validate_actions(con):
     checks = validate_contract(con,ACTIONS)
     queries = {
-      'budget':f"SELECT count(*) FROM diagnostics.action_portfolio WHERE spent_usd>{c.ACTION_BUDGET_USD} OR unallocated_usd<0 OR funded_action_types>{c.MAX_FUNDED_ACTION_TYPES}",
+      'budget':f"SELECT count(*) FROM diagnostics.action_portfolio WHERE spent_usd>{c.ACTION_BUDGET_USD} OR unallocated_usd<0"+
+        (f' OR funded_action_types>{c.MAX_FUNDED_ACTION_TYPES}' if c.MAX_FUNDED_ACTION_TYPES is not None else ''),
       'cost_identities':'''SELECT count(*) FROM marts.mart_actions WHERE total_cost_usd<0
         OR total_cost_usd<>quantity*(unit_cost_usd+recurring_cost_per_day_usd*effective_operating_days::BIGINT)+additional_comp_cost_usd
         OR (net_benefit_usd IS NOT NULL AND net_benefit_usd<>benefit_before_action_cost_usd-total_cost_usd)
