@@ -5,6 +5,14 @@ the one file to update.
 """
 from __future__ import annotations
 
+UNDERPERFORMANCE_INDICATORS = [
+    ('low_earnings', 'Low actual earnings', 'Actual house win/hour below zone peers; at least 14 peer-covered days and 80% available-hour coverage.'),
+    ('low_demand', 'Low wagering demand', 'Among below-peer earners: wagering/hour more than 20% below zone peers.'),
+    ('persistent', 'Persistent shortfall', 'Among below-peer earners: lower actual earnings in at least 3 months and two-thirds of measured months. A measured month needs 7 peer-covered days.'),
+    ('low_availability', 'Low availability', 'Among below-peer earners: more than 5% of scheduled time unavailable.'),
+    ('repair_change', 'Repair-related change', 'Among below-peer earners: actual earnings/hour changed by at least 20% around a comparable repair; seven complete dates on each side.'),
+]
+
 # primary_classification -> (label, betting spot on the opening page, plain-English cause)
 CLASSES = {
     "luck_compatible":       ("Luck",            "Luck",         "bad luck"),

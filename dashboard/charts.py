@@ -49,7 +49,7 @@ def figure(height: int = 320, legend: bool = True, hovermode: str | bool = "clos
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom",
                     title_text="", font=dict(color=INK_2), itemclick="toggle"),
         hovermode=hovermode,
-        hoverlabel=dict(font=dict(family=FONT, size=12), align="left"),
+        hoverlabel=dict(bgcolor=SURFACE,bordercolor=AXIS,font=dict(family=FONT,size=12,color=INK),align="left"),
         barcornerradius=4,
         bargap=0.4,
         bargroupgap=0.08,
@@ -82,6 +82,30 @@ def shade_spans(fig: go.Figure, spans: list[tuple], label_y: float = 1.0) -> Non
 
 
 # ---- table view ------------------------------------------------------------------------
+def source_label(value) -> str:
+    """Keep implementation table names out of dashboard captions."""
+    labels = {
+        'mart_machine_daily': 'Daily machine earnings and operations',
+        'mart_machine_month': 'Monthly machine performance',
+        'mart_machine_scorecard': 'Machine performance analysis',
+        'mart_floor_daily': 'Daily floor activity',
+        'mart_zone_daily': 'Zone activity and traffic',
+        'mart_tickets': 'Maintenance and repair records',
+        'mart_downtime_hourly': 'Hourly availability and downtime',
+        'mart_forecast': 'Demand forecast and validation',
+        'mart_actions': 'Action costs and benefit scenarios',
+        'mart_player_month': 'Monthly tracked player activity',
+        'mart_visits_month': 'Recorded casino visits',
+        'mart_benchmark_month': 'Monthly industry and visitation comparisons',
+        'mart_comps_daily': 'Daily loyalty program activity',
+        'mart_comps_tier_month': 'Monthly loyalty program activity by tier',
+    }
+    result = str(value)
+    for key,label in labels.items():
+        result = result.replace(key,label)
+    return result.replace('_',' ')
+
+
 def fmt_money(v, decimals: int = 0) -> str:
     if pd.isna(v):
         return "–"

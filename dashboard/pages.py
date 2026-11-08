@@ -6,6 +6,7 @@ marts, so the real data drops in without edits. Column names follow docs/mart_co
 from __future__ import annotations
 
 import html
+import textwrap
 from dataclasses import replace
 from functools import lru_cache
 
@@ -27,16 +28,16 @@ TIER_ORDER = ["Base", "Bronze", "Silver", "Gold", "Platinum"]
 
 # The story, in reading order. (endpoint, title, question tag, question)
 CHAPTERS = [
-    ("verdict", "The verdict", "Q1",
-     "Which machines are truly underperforming once exposure, availability and luck are accounted for?"),
+    ("verdict", "Machine summary", "Q1",
+     "Which ten machines are the weakest replacement candidates?"),
     ("machines", "Machine explorer", "Q1",
      "What explains any one machine's result: demand, luck, downtime or its spot?"),
     ("demand", "Floor demand", "Q2",
      "What changed in demand across the floor over the six months, and why?"),
     ("downtime", "Downtime", "Q3",
      "How much play was lost to downtime, and when?"),
-    ("guests", "Players and comps", "Q4 and Q5",
-     "What did tracked players wager, get back and net, and what did the comp program cost?"),
+    ("guests", "Players and compensation", "Q4 and Q5",
+     "What did loyalty players wager, receive back and net, and what did their rewards cost?"),
     ("forecast", "Forecast", "Model",
      "Can we forecast daily coin-in better than a flat average, and what does that change?"),
     ("plan", "The $100K plan", "Q6",
@@ -190,150 +191,8 @@ def elimination_grid(naive: pd.DataFrame, f: Filters) -> Markup:
 
 
 def verdict(f: Filters) -> dict:
-    sc = scorecard(f)
-    naive, adj = sc[sc.naive_bottom_10], sc[sc.on_adjusted]
-    head, meaning, top_code = verdict_story(sc)
-    overlap = len(set(naive.machine_id) & set(adj.machine_id))
-
-    # Two rankings on one plot: what the manager ranked on vs the exposure-adjusted rate.
-    group = pd.Series("Other machines", index=sc.index)
-    group[sc.naive_bottom_10] = "Manager's bottom 10"
-    group[sc.on_adjusted] = "Adjusted bottom 10"
-    group[sc.naive_bottom_10 & sc.on_adjusted] = "On both lists"
-    sc = sc.assign(group=group)
-    fig = figure(height=380)
-    for name, color, size in [("Other machines", MUTED, 7), ("Manager's bottom 10", ORANGE, 11),
-                              ("Adjusted bottom 10", BLUE, 11), ("On both lists", AQUA, 12)]:
-        d = sc[sc.group == name]
-        if d.empty:
-            continue
-        fig.add_trace(go.Scatter(
-            x=d.house_win_usd, y=d.expected_contribution_per_available_hour, mode="markers", name=name,
-            marker=dict(color=color, size=size, opacity=0.5 if name == "Other machines" else 1,
-                        line=dict(color=SURFACE, width=2)),
-            customdata=d[["machine_id", "label", "zone_name"]],
-            hovertemplate="<b>%{customdata[0]}</b>, %{customdata[2]}<br>House win %{x:$,.0f}<br>"
-                          "Expected contribution %{y:$,.2f} per open hour<br>%{customdata[1]}<extra></extra>"))
-    money_axis(fig, "xaxis", "Total house win, Jan–Jun (how the manager ranked)")
-    fig.update_layout(yaxis=dict(tickprefix="$", title_text="Expected contribution per open hour"))
-    rankings = Chart("verdict-rankings", "Two ways to rank the same floor", fig, "mart_machine_scorecard",
-                     subtitle="Left is low total house win. Low is low expected win per hour the machine "
-                              "could be played, after its own costs. Luck is taken out of the second measure.",
-                     table=table(sc[["machine_id", "zone_name", "group", "naive_rank", "adjusted_rank",
-                                     "house_win_usd", "expected_contribution_per_available_hour", "label"]]
-                                 .sort_values("naive_rank")
-                                 .rename(columns={"machine_id": "Machine", "zone_name": "Zone", "group": "List",
-                                                  "naive_rank": "Manager rank", "adjusted_rank": "Adjusted rank",
-                                                  "house_win_usd": "House win",
-                                                  "expected_contribution_per_available_hour": "Expected contribution / hr",
-                                                  "label": "Diagnosis"}),
-                                 {"House win": fmt_money, "Expected contribution / hr": lambda v: fmt_money(v, 2)}),
-                     wide=True)
-
-    listed = pd.concat([naive.assign(list="Manager's bottom 10"), adj.assign(list="Adjusted bottom 10")]) \
-        .drop_duplicates("machine_id").sort_values("theo_per_available_hour", ascending=False)
-    fig2 = figure(height=max(300, 60 + 22 * len(listed)))
-    for r in listed.itertuples():
-        fig2.add_shape(type="line", x0=r.peer_theo_per_hour, x1=r.theo_per_available_hour,
-                       y0=r.machine_id, y1=r.machine_id, line=dict(color=AXIS, width=2), layer="below")
-    fig2.add_trace(go.Scatter(x=listed.peer_theo_per_hour, y=listed.machine_id, mode="markers",
-                              name="Zone neighbours", customdata=listed.zone_name,
-                              marker=dict(color=MUTED, size=10, symbol="line-ns-open", line=dict(width=2, color=MUTED)),
-                              hovertemplate="%{customdata} neighbours: %{x:$,.2f}/hr<extra></extra>"))
-    for name, color in [("Manager's bottom 10", ORANGE), ("Adjusted bottom 10", BLUE)]:
-        d = listed[listed.list == name]
-        fig2.add_trace(go.Scatter(x=d.theo_per_available_hour, y=d.machine_id, mode="markers", name=name,
-                                  marker=dict(color=color, size=10, line=dict(color=SURFACE, width=2)),
-                                  customdata=d[["zone_name", "peer_rate_ratio"]],
-                                  hovertemplate="<b>%{y}</b> in %{customdata[0]}: %{x:$,.2f}/hr<br>"
-                                                "%{customdata[1]:.0%} of its neighbours<extra></extra>"))
-    fig2.update_layout(xaxis=dict(tickprefix="$", title_text="Theo per open hour", showgrid=True, gridcolor=GRID),
-                       yaxis=dict(showgrid=False, type="category", categoryorder="array",
-                                  categoryarray=list(listed.machine_id)))
-    vs_zone = Chart("verdict-zone", "Machine or spot?", fig2, "mart_machine_scorecard",
-                    subtitle="Each listed machine against its zone neighbours on the same days. Close to the "
-                             "tick means the spot is the limit; far below it points at the machine.",
-                    table=table(listed[["machine_id", "list", "zone_name", "theo_per_available_hour",
-                                        "peer_theo_per_hour", "peer_rate_ratio"]],
-                                {"theo_per_available_hour": lambda v: fmt_money(v, 2),
-                                 "peer_theo_per_hour": lambda v: fmt_money(v, 2), "peer_rate_ratio": fmt_pct}))
-
-    gap = listed.assign(gap=listed.luck_residual_usd / listed.coin_in_usd)
-    fig3 = figure(height=fig2.layout.height)
-    fig3.add_vline(x=0, line_color=AXIS, line_width=1)
-    for name, color in [("Manager's bottom 10", ORANGE), ("Adjusted bottom 10", BLUE)]:
-        d = gap[gap.list == name]
-        fig3.add_trace(go.Scatter(
-            x=d.gap, y=d.machine_id, mode="markers", name=name,
-            marker=dict(color=color, size=10, line=dict(color=SURFACE, width=2)),
-            error_x=dict(type="data", symmetric=False, array=d.bootstrap_hold_gap_high - d.gap,
-                         arrayminus=d.gap - d.bootstrap_hold_gap_low, color=color, thickness=2, width=4),
-            customdata=d[["bootstrap_hold_gap_low", "bootstrap_hold_gap_high", "luck_q_value"]],
-            hovertemplate="<b>%{y}</b>: hold %{x:+.2%} vs. expected<br>95%% luck interval "
-                          "%{customdata[0]:+.2%} to %{customdata[1]:+.2%}<br>q = %{customdata[2]:.2f}<extra></extra>"))
-    fig3.update_layout(xaxis=dict(tickformat="+.1%", title_text="Actual hold minus expected hold", showgrid=True,
-                                  gridcolor=GRID),
-                       yaxis=dict(showgrid=False, type="category", categoryorder="array",
-                                  categoryarray=list(listed.machine_id)))
-    luck = Chart("verdict-luck", "Is it just luck?", fig3, "mart_machine_scorecard",
-                 subtitle="Bars are the block-bootstrap luck interval. One that crosses zero means luck "
-                          "can't be ruled out; it doesn't prove the machine is fine.",
-                 table=table(gap[["machine_id", "list", "gap", "bootstrap_hold_gap_low", "bootstrap_hold_gap_high",
-                                  "luck_z_score", "luck_q_value"]],
-                             {"gap": lambda v: fmt_pct(v, 2), "bootstrap_hold_gap_low": lambda v: fmt_pct(v, 2),
-                              "bootstrap_hold_gap_high": lambda v: fmt_pct(v, 2),
-                              "luck_z_score": lambda v: fmt_num(v, 2), "luck_q_value": lambda v: fmt_num(v, 3)}))
-
-    counts = sc.label.value_counts().sort_values()
-    fig4 = figure(height=260, legend=False)
-    fig4.add_trace(go.Bar(x=counts.values, y=counts.index, orientation="h", marker_color=BLUE,
-                          text=counts.values, textposition="outside", cliponaxis=False,
-                          textfont=dict(color=INK_2), hovertemplate="%{y}: %{x} machines<extra></extra>"))
-    fig4.update_layout(xaxis=dict(showgrid=True, gridcolor=GRID, title_text="Machines"), yaxis=dict(showgrid=False))
-    mix = Chart("verdict-mix", "Every machine's diagnosis", fig4, "mart_machine_scorecard",
-                subtitle="The whole floor, so the manager's 10 can be read against it.",
-                table=table(counts.rename("Machines").rename_axis("Diagnosis").reset_index().iloc[::-1]), wide=True)
-
-    adj_t = adj.sort_values("adjusted_rank")[["adjusted_rank", "machine_id", "zone_name",
-                                              "expected_contribution_per_available_hour", "peer_rate_ratio",
-                                              "availability_ratio", "naive_bottom_10", "label",
-                                              "classification_reason"]]
-    adj_t.columns = ["Rank", "Machine", "Zone", "Expected contribution / hr", "Vs. neighbours", "Availability",
-                     "On manager's list", "Diagnosis", "Why"]
-    return {
-        "headline": head,
-        "lede": "The manager ranked machines by total house win. We re-ranked them by expected win per hour "
-                "they could actually be played, after their own costs, then tested each one for luck, "
-                "location, downtime, repairs and a hold gap.",
-        "rail": [
-            tile("Also on our adjusted list", f"{overlap} of {len(naive)}", "Same machines, different reasons"),
-            tile("Weak machines to replace", str(int((naive.primary_classification == "weak_demand_candidate").sum())),
-                 "In the manager's 10"),
-            tile("Luck can't be ruled out", str(int(naive.luck_compatible.fillna(False).sum())),
-                 "Interval crosses zero"),
-            tile("Their rate vs. neighbours", fmt_pct(naive.peer_rate_ratio.median(), 0), "Median of the 10"),
-            tile("Their availability", fmt_pct(naive.available_seconds.sum() / naive.scheduled_seconds.sum()
-                                               if len(naive) else None), "Open hours ÷ scheduled hours"),
-        ],
-        "sections": [
-            {"title": "Which of the manager's 10 survive each test",
-             "intro": "Each column is one way a machine can look weak without being weak. A machine is a "
-                      "replacement candidate only if its weakness survives them.",
-             "blocks": [elimination_grid(naive, f)], "source": "mart_machine_scorecard"},
-            {"charts": [rankings, vs_zone, luck, mix]},
-            {"title": "Our adjusted bottom 10",
-             "intro": "Ranked on expected contribution per open hour. A low rank alone doesn't prove a "
-                      "replacement would pay; the diagnosis says why.",
-             "blocks": [table(adj_t, {"Expected contribution / hr": lambda v: fmt_money(v, 2),
-                                      "Vs. neighbours": fmt_pct, "Availability": fmt_pct},
-                              {"Machine": lambda r: machine_link(f)(r.Machine)})],
-             "source": "mart_machine_scorecard"},
-        ],
-        "meaning": meaning,
-        "scope_note": "Tests, ranks and diagnoses cover January to June 2025 as a whole. The period "
-                      "filter doesn't change them; zone and bank filters narrow the lists.",
-        "period_fixed": True,
-    }
+    from .machine_summary import build
+    return build(f)
 
 
 # =========================================================================================
@@ -376,182 +235,13 @@ def machines_story(f: Filters, m: pd.DataFrame | None = None) -> str:
 
 
 def machines(f: Filters) -> dict:
-    m = machine_period(f)
-    k = floor_kpis(f)
-    fig = figure(height=420)
-    top = float(np.nanmax([m.theo_per_hr.max(), m.win_per_hr.max(), 1])) * 1.05
-    fig.add_trace(go.Scatter(x=[0, top], y=[0, top], mode="lines", name="Won exactly what theo expected",
-                             line=dict(color=AXIS, width=1), hoverinfo="skip"))
-    if f.diag:
-        groups = [("Other machines", MUTED, m.primary_classification != f.diag),
-                  (cls_label(f.diag), BLUE, m.primary_classification == f.diag)]
-    else:
-        groups = [("Other machines", MUTED, ~(m.naive_bottom_10 | m.on_adjusted)),
-                  ("Manager's bottom 10", ORANGE, m.naive_bottom_10 & ~m.on_adjusted),
-                  ("Adjusted bottom 10", BLUE, m.on_adjusted & ~m.naive_bottom_10),
-                  ("On both lists", AQUA, m.naive_bottom_10 & m.on_adjusted)]
-    for name, color, mask in groups:
-        d = m[mask]
-        if d.empty:
-            continue
-        fig.add_trace(go.Scatter(
-            x=d.theo_per_hr, y=d.win_per_hr, mode="markers", name=name,
-            marker=dict(color=color, size=7 if color == MUTED else 11, opacity=0.5 if color == MUTED else 1,
-                        line=dict(color=SURFACE, width=2)),
-            customdata=d[["machine_id", "label", "zone_name", "availability"]],
-            hovertemplate="<b>%{customdata[0]}</b>, %{customdata[2]}<br>Theo %{x:$,.2f}/hr, "
-                          "actual %{y:$,.2f}/hr<br>Open %{customdata[3]:.0%} of scheduled hours<br>"
-                          "%{customdata[1]}<extra></extra>"))
-    fig.update_layout(xaxis=dict(tickprefix="$", title_text="Theo per open hour (what it should win)", rangemode="tozero"),
-                      yaxis=dict(tickprefix="$", title_text="House win per open hour (what it won)"))
-    scatter = Chart("machines-scatter", "Expected against actual, per open hour", fig,
-                    "mart_machine_daily, mart_machine_scorecard",
-                    subtitle="Above the line the machine ran lucky; below it, unlucky. Far left means few "
-                             "players chose it, whatever the luck.", wide=True)
-
-    by = "bank_id" if f.zone else "zone_name"
-    w, p = f.where()
-    g = query(f"""SELECT {by} grp, SUM(theo_usd) / NULLIF(SUM(available_seconds) / 3600.0, 0) theo_per_hr,
-                         COUNT(DISTINCT machine_id) machines
-                  FROM {T('mart_machine_daily')} WHERE {w} GROUP BY 1 ORDER BY 2""", p)
-    fig2 = figure(height=320, legend=False)
-    hi = g.grp == (f.bank if f.bank else None)
-    fig2.add_trace(go.Bar(y=g.grp, x=g.theo_per_hr, orientation="h",
-                          marker_color=[BLUE if (not f.bank or h) else MUTED for h in hi], customdata=g.machines,
-                          hovertemplate="%{y}: %{x:$,.2f} theo per open hour, %{customdata} machines<extra></extra>"))
-    fig2.update_layout(xaxis=dict(tickprefix="$", title_text="Theo per open hour", showgrid=True, gridcolor=GRID),
-                       yaxis=dict(type="category", showgrid=False))
-    where = Chart("machines-where", f"Expected win per open hour, by {'bank' if f.zone else 'zone'}", fig2,
-                  "mart_machine_daily", subtitle="Ratio of sums over the period, so busy days weigh more.",
-                  table=table(g.rename(columns={"grp": "Bank" if f.zone else "Zone",
-                                                "theo_per_hr": "Theo per open hour", "machines": "Machines"}),
-                              {"Theo per open hour": lambda v: fmt_money(v, 2)}))
-
-    mix = m.label.value_counts().sort_values()
-    fig3 = figure(height=320, legend=False)
-    fig3.add_trace(go.Bar(y=mix.index, x=mix.values, orientation="h",
-                          marker_color=[BLUE if (not f.diag or lab == cls_label(f.diag)) else MUTED for lab in mix.index],
-                          hovertemplate="%{y}: %{x} machines<extra></extra>"))
-    fig3.update_layout(xaxis=dict(showgrid=True, gridcolor=GRID, title_text="Machines"), yaxis=dict(showgrid=False))
-    diag = Chart("machines-diag", "Diagnoses in this view", fig3, "mart_machine_scorecard",
-                 subtitle="Pick one in the Diagnosis filter to light it up on the chart above.")
-
-    t = m.sort_values("net_per_hr")[["machine_id", "zone_name", "bank_id", "manufacturer", "theme", "days",
-                                     "coin_in", "house_win", "theo", "luck", "availability", "theo_per_hr",
-                                     "net_per_hr", "label"]]
-    t.columns = ["Machine", "Zone", "Bank", "Maker", "Game", "Days", "Coin-in", "House win", "Theo", "Luck",
-                 "Availability", "Theo / hr", "Contribution / hr", "Diagnosis"]
-    return {
-        "headline": machines_story(f, m),
-        "lede": "Everything here is recomputed for the period and place you pick, as ratios of sums. "
-                "Sort the table, or open any machine for its day-by-day history.",
-        "rail": [
-            tile("Machines", fmt_num(k["machines"]), f.location_label),
-            tile("Coin-in", fmt_short_money(k["coin_in"]), "Total wagered"),
-            tile("Theo", fmt_short_money(k["theo"]), "Expected house win"),
-            tile("Luck", fmt_short_money((k["house_win"] or 0) - (k["theo"] or 0)), "House win minus theo",
-                 "pos" if (k["house_win"] or 0) >= (k["theo"] or 0) else "neg"),
-            tile("Availability", fmt_pct(k["avail"] / k["sched"] if k["sched"] else None), "Open ÷ scheduled hours"),
-        ],
-        "sections": [
-            {"charts": [scatter, where, diag]},
-            {"title": "Every machine", "intro": f"{f.location_label}, {f.period_label}. Sorted weakest first "
-                                                "by expected contribution per open hour.",
-             "blocks": [table(t, {**{c: fmt_money for c in ["Coin-in", "House win", "Theo", "Luck"]},
-                                  "Availability": fmt_pct, "Theo / hr": lambda v: fmt_money(v, 2),
-                                  "Contribution / hr": lambda v: fmt_money(v, 2)},
-                              {"Machine": lambda r: machine_link(f)(r.Machine)})],
-             "source": "mart_machine_daily; Diagnosis from mart_machine_scorecard"},
-        ],
-        "meaning": "A machine far left on the scatter in a busy zone is the replacement case. A machine "
-                   "near the line in a quiet zone needs a better spot, not a new cabinet.",
-        "diag_filter": True,
-        "scope_note": "Diagnoses come from the full January to June scorecard; every other number follows the filters.",
-    }
+    from .machine_explorer import build
+    return build(f)
 
 
 def machine_detail(f: Filters, machine_id: str) -> dict | None:
-    sc = query(f"SELECT * FROM {T('mart_machine_scorecard')} WHERE machine_id = ?", [machine_id])
-    if sc.empty:
-        return None
-    s = sc.iloc[0]
-    pos = positions().set_index("machine_id").loc[machine_id]
-    w, p = f.where(location=False)
-    d = query(f"SELECT * FROM {T('mart_machine_daily')} WHERE machine_id = ? AND {w} ORDER BY gaming_date",
-              [machine_id, *p])
-
-    fig = figure(height=320, hovermode="x unified")
-    fig.add_trace(go.Scatter(x=d.gaming_date, y=d.theo_usd.cumsum(), name="Expected (theo)",
-                             line=dict(color=MUTED, width=2), hovertemplate="%{y:$,.0f}"))
-    fig.add_trace(go.Scatter(x=d.gaming_date, y=d.house_win_usd.cumsum(), name="Actual house win",
-                             line=dict(color=BLUE, width=2), hovertemplate="%{y:$,.0f}"))
-    money_axis(fig, title="Running total")
-    cum = Chart("machine-cum", "Actual against expected house win", fig, "mart_machine_daily",
-                subtitle="The gap between the lines is luck. Luck wanders around the expected line; "
-                         "a payout problem drifts steadily away from it.", wide=True)
-
-    fig2 = figure(height=260, legend=False)
-    fig2.add_trace(go.Bar(x=d.gaming_date, y=d.available_seconds / d.scheduled_seconds, marker_color=BLUE,
-                          hovertemplate="%{x|%b %d}: open %{y:.0%} of scheduled hours<extra></extra>"))
-    pct_axis(fig2, title="Open share of scheduled hours")
-    fig2.update_layout(bargap=0.15, barcornerradius=1, yaxis_range=[0, 1.02])
-    avail = Chart("machine-avail", "Daily availability", fig2, "mart_machine_daily")
-
-    mm = query(f"SELECT * FROM {T('mart_machine_month')} WHERE machine_id = ? ORDER BY month_start", [machine_id])
-    fig3 = figure(height=260, legend=False)
-    fig3.add_hrect(y0=-1.96, y1=1.96, fillcolor=BAND, line_width=0, layer="below")
-    fig3.add_trace(go.Bar(x=mm.month_start, y=mm.luck_z_score, marker_color=BLUE,
-                          customdata=mm[["luck_residual_usd", "luck_q_value"]],
-                          hovertemplate="%{x|%B}: z = %{y:.2f}<br>Luck %{customdata[0]:$,.0f}, "
-                                        "q = %{customdata[1]:.2f}<extra></extra>"))
-    fig3.update_layout(yaxis_title_text="Luck z-score", xaxis=dict(tickformat="%b", dtick="M1"))
-    monthly = Chart("machine-month", "Luck by month", fig3, "mart_machine_month",
-                    subtitle="The shaded band is ordinary luck (|z| under 1.96).",
-                    table=table(mm[["month_start", "active_days", "coin_in_usd", "house_win_usd", "theo_usd",
-                                    "luck_residual_usd", "luck_z_score", "luck_q_value"]],
-                                {"month_start": lambda v: f"{v:%B}", "coin_in_usd": fmt_money,
-                                 "house_win_usd": fmt_money, "theo_usd": fmt_money, "luck_residual_usd": fmt_money,
-                                 "luck_z_score": lambda v: fmt_num(v, 2), "luck_q_value": lambda v: fmt_num(v, 3)}))
-
-    runs = d.assign(run=(d.location_id != d.location_id.shift()).cumsum()).groupby("run").agg(
-        Slot=("location_id", "first"), Zone=("zone_name", "first"), Bank=("bank_id", "first"),
-        Game=("theme", "first"), From=("gaming_date", "min"), To=("gaming_date", "max"),
-        Days=("gaming_date", "count"))
-    tk = query(f"SELECT * FROM {T('mart_tickets')} WHERE machine_id = ? AND gaming_date BETWEEN ? AND ? "
-               f"ORDER BY opened_at_utc", [machine_id, f.start, f.end])
-    tk_t = pd.DataFrame({"Ticket": tk.operation_id, "Type": tk.event_type.map(lambda e: EVENT_TYPES.get(e, e)),
-                         "Gaming date": tk.gaming_date, "Response (h)": tk.response_hours,
-                         "Repair (h)": tk.repair_hours, "Theo/hr before": tk.before_theo_per_hour,
-                         "Theo/hr after": tk.after_theo_per_hour})
-    flags = [lab for col, lab in FLAGS_NOT_MACHINE + FLAGS_MACHINE if pd.notna(s.get(col)) and bool(s.get(col))]
-    return {
-        "headline": f"{cls_label(s.primary_classification)}. {s.classification_reason}",
-        "lede": (f"{pos.zone_name}, bank {pos.bank_id}. {pos.manufacturer} cabinet running {pos.theme} "
-                 f"({pos.volatility_class} volatility). Manager's rank {int(s.naive_rank)}, adjusted rank "
-                 f"{int(s.adjusted_rank)}." + (f" Evidence flags: {', '.join(flags)}." if flags else "")),
-        "rail": [
-            tile("House win", fmt_short_money(s.house_win_usd), "January to June"),
-            tile("Theo", fmt_short_money(s.theo_usd), "Expected house win"),
-            tile("Luck", fmt_short_money(s.luck_residual_usd), f"z = {fmt_num(s.luck_z_score, 2)}, "
-                 f"q = {fmt_num(s.luck_q_value, 2)}", "pos" if s.luck_residual_usd >= 0 else "neg"),
-            tile("Hold", fmt_pct(s.observed_hold, 2), f"Expected {fmt_pct(s.expected_hold, 2)}"),
-            tile("Availability", fmt_pct(s.availability_ratio)),
-            tile("Theo per open hour", fmt_money(s.theo_per_available_hour, 2),
-                 f"Neighbours {fmt_money(s.peer_theo_per_hour, 2)}"),
-        ],
-        "sections": [
-            {"charts": [cum, avail, monthly]},
-            {"title": "Where it stood", "blocks": [table(runs, {"From": lambda v: f"{v:%b %d}", "To": lambda v: f"{v:%b %d}"},
-                                                          sortable=False)],
-             "source": "mart_machine_daily (location_id by day)"},
-            {"title": "Service tickets", "source": "mart_tickets",
-             "blocks": [table(tk_t, {"Response (h)": lambda v: fmt_num(v, 1), "Repair (h)": lambda v: fmt_num(v, 1),
-                                     "Theo/hr before": lambda v: fmt_money(v, 2), "Theo/hr after": lambda v: fmt_money(v, 2)})
-                        if not tk.empty else Markup('<p class="empty">No tickets in this period.</p>')]},
-        ],
-        "title_override": f"Machine {machine_id}",
-        "back": True,
-    }
+    from .machine_explorer import detail
+    return detail(f, machine_id)
 
 
 # =========================================================================================
@@ -587,9 +277,7 @@ def demand_story(f: Filters) -> str:
     if len(b) == 2:
         mo = b.missouri_coin_in_index.iloc[1] / b.missouri_coin_in_index.iloc[0] - 1
         lv = b.las_vegas_visitors_index.iloc[1] / b.las_vegas_visitors_index.iloc[0] - 1
-        market = (np.sign(mo) == np.sign(change) or abs(mo) < 0.01) and abs(change - mo) < 0.03
-        s += (f" Missouri slots moved {mo:+.1%} and Las Vegas visitors {lv:+.1%}, so the shift looks "
-              f"{'market-wide, not specific to this floor' if market else 'specific to this floor'}.")
+        s += f" Missouri slot coin-in moved {mo:+.1%} and Las Vegas visitors {lv:+.1%}."
     return s
 
 
@@ -601,30 +289,43 @@ def demand(f: Filters) -> dict:
     mon = daily.groupby("month").agg(c=("coin_in", "sum"), md=("machine_days", "sum"))
     daily["month_mean"] = daily.month.map(mon.c / mon.md)
     daily["weekday"] = daily.weekday_index.map(lambda i: WEEKDAYS[int(i)] if pd.notna(i) else "")
+    daily['event_hover'] = daily.events_active.fillna('').map(
+        lambda value:'<br>'.join(html.escape(line) for line in textwrap.wrap(str(value),38)))
 
     fig = figure(height=360, hovermode="x unified")
     fig.add_trace(go.Scatter(x=daily.gaming_date, y=daily.per_md, name="Daily", mode="lines",
                              line=dict(color=MUTED, width=1),
-                             customdata=daily[["weekday", "events_active"]].fillna(""),
-                             hovertemplate="%{y:$,.0f} (%{customdata[0]}) %{customdata[1]}"))
+                             customdata=daily[["weekday", "event_hover"]].fillna(""),
+                             hovertemplate="%{y:$,.0f} (%{customdata[0]})<br>%{customdata[1]}<extra></extra>"))
     fig.add_trace(go.Scatter(x=daily.gaming_date, y=daily.avg7, name="7-day average", mode="lines",
                              line=dict(color=BLUE, width=2), hovertemplate="%{y:$,.0f}"))
     fig.add_trace(go.Scatter(x=daily.gaming_date, y=daily.month_mean, name="Monthly average", mode="lines",
                              line=dict(color=ORANGE, width=2, shape="hv"), hovertemplate="%{y:$,.0f}"))
+    event_key=[]
+    # Group before dropping non-event dates, so separate occurrences are not bridged.
+    daily['event_block']=(daily.events_active.fillna('')!=daily.events_active.fillna('').shift()).cumsum()
     ev = daily.dropna(subset=["events_active"])
     if not ev.empty:
-        spans = ev.assign(blk=(ev.events_active != ev.events_active.shift()).cumsum()) \
-            .groupby("blk").agg(start=("gaming_date", "min"), end=("gaming_date", "max"), name=("events_active", "first"))
-        shade_spans(fig, [(pd.Timestamp(r.start) - pd.Timedelta(hours=12), pd.Timestamp(r.end) + pd.Timedelta(hours=12),
-                           r.name) for r in spans.itertuples()])
+        spans = ev.groupby('event_block').agg(start=("gaming_date", "min"), end=("gaming_date", "max"), name=("events_active", "first"))
+        for i,r in enumerate(spans.itertuples(),1):
+            start=pd.Timestamp(r.start)-pd.Timedelta(hours=12)
+            end=pd.Timestamp(r.end)+pd.Timedelta(hours=12)
+            fig.add_vrect(x0=start,x1=end,fillcolor=BAND,line_width=0,layer='below')
+            wrapped='<br>'.join(html.escape(line) for line in textwrap.wrap(str(r.name),32))
+            fig.add_annotation(name='event-marker',x=start+(end-start)/2,y=1.02+(i%2)*.09,xref='x',yref='paper',
+                text=f'[{i}]',hovertext=wrapped,showarrow=False,font=dict(size=10,color=INK_2),yanchor='bottom')
+            event_key.append({'number':i,'name':str(r.name),'dates':f'{r.start:%b %d}–{r.end:%b %d}'})
+        fig.update_layout(margin=dict(t=76))
     money_axis(fig, title="Coin-in per machine-day")
     trend = Chart("demand-trend", "Daily demand " + ("on the whole floor" if not f.zone else f"in {f.location_label}"),
                   fig, "mart_machine_daily, events from mart_floor_daily",
-                  subtitle="Coin-in per machine on the floor, so days with fewer machines compare fairly. "
-                           "Shaded spans are events.",
+                  subtitle="Wagered per active machine-day. Shaded spans mark events; hover a numbered marker or open the event key.",
                   table=table(daily[["gaming_date", "weekday", "coin_in", "machine_days", "per_md", "events_active",
-                                     "holiday"]],
-                              {"coin_in": fmt_money, "per_md": fmt_money}), wide=True)
+                                     "holiday"]].rename(columns={'gaming_date':'Gaming date','weekday':'Weekday',
+                                         'coin_in':'Total wagered','machine_days':'Active machine-days','per_md':'Wagered per machine-day',
+                                         'events_active':'Events','holiday':'Holiday'}),
+                              {'Gaming date':lambda d:f'{d:%b %d}', 'Total wagered':fmt_money,'Wagered per machine-day':fmt_money}),
+                  wide=True,extra={'event_key':event_key})
 
     months = [p.start_time for p in mon.index]
     b = query(f"SELECT * FROM {T('mart_benchmark_month')} ORDER BY month_start")
@@ -639,31 +340,39 @@ def demand(f: Filters) -> dict:
                                   hovertemplate="%{y:.1f}"))
     fig2.add_hline(y=100, line_color=AXIS, line_width=1)
     fig2.update_layout(yaxis_title_text="Index, first month = 100", xaxis=dict(tickformat="%b", dtick="M1"))
-    bench = Chart("demand-bench", "This floor, or the whole market?", fig2, "mart_benchmark_month",
+    bench = Chart("demand-bench", "Casino and market demand", fig2, "mart_benchmark_month",
                   subtitle="Indexed so different units share one axis. Missouri and Las Vegas figures are "
                            "real public data and describe those markets, not this casino's guests.",
                   table=table(b[["month_start", "property_coin_in_per_machine_day", "missouri_coin_in_usd",
-                                 "las_vegas_visitor_volume", "missouri_status", "visitation_status"]],
-                              {"month_start": lambda v: f"{v:%B}", "property_coin_in_per_machine_day": fmt_money,
-                               "missouri_coin_in_usd": fmt_short_money, "las_vegas_visitor_volume": fmt_num}),
+                                 "las_vegas_visitor_volume", "missouri_status", "visitation_status"]].rename(columns={
+                                     'month_start':'Month','property_coin_in_per_machine_day':'Casino wagers per machine-day',
+                                     'missouri_coin_in_usd':'Missouri slot wagers','las_vegas_visitor_volume':'Las Vegas visitors',
+                                     'missouri_status':'Missouri data status','visitation_status':'Visitation data status'}),
+                              {'Month':lambda v:f'{v:%B}','Casino wagers per machine-day':fmt_money,
+                               'Missouri slot wagers':fmt_short_money,'Las Vegas visitors':fmt_num}),
                   note="Not affected by zone or bank.")
 
     wm, pm = f.where_month()
     v = query(f"""SELECT month_start, SUM(observed_visits) visits, SUM(visit_assigned_coin_in_usd) coin_in
                   FROM {T('mart_visits_month')} WHERE {wm} GROUP BY 1 ORDER BY 1""", pm)
-    v["per_visit"] = v.coin_in / v.visits
+    v["per_visit"] = v.coin_in / v.visits.replace(0,float('nan'))
     fig3 = figure(height=320, hovermode="x unified")
     for i, (col, name) in enumerate([("visits", "Recorded visits"), ("per_visit", "Wagered per visit")]):
-        y = v[col] / v[col].iloc[0] * 100 if len(v) else v[col]
+        y = v[col] / (v[col].iloc[0] if v[col].iloc[0] else float('nan')) * 100 if len(v) else v[col]
         fig3.add_trace(go.Scatter(x=v.month_start, y=y, name=name, mode="lines+markers",
-                                  line=dict(color=SERIES[i], width=2), marker=dict(size=8), hovertemplate="%{y:.1f}"))
+                                  customdata=v[col],line=dict(color=SERIES[i], width=2), marker=dict(size=8),
+                                  hovertemplate=("Index: %{y:.1f}<br>Recorded visits: %{customdata:,.0f}<extra></extra>" if col=='visits' else
+                                                 "Index: %{y:.1f}<br>Wagered per visit: $%{customdata:,.2f}<extra></extra>")))
     fig3.add_hline(y=100, line_color=AXIS, line_width=1)
     fig3.update_layout(yaxis_title_text="Index, first month = 100", xaxis=dict(tickformat="%b", dtick="M1"))
-    visits = Chart("demand-visits", "Fewer visits, or smaller ones?", fig3, "mart_visits_month",
-                   subtitle="Card holders only, by the month each visit began. Fewer visits call for "
-                            "marketing; smaller visits call for the floor itself.",
-                   table=table(v, {"month_start": lambda d: f"{d:%B}", "visits": fmt_num, "coin_in": fmt_money,
-                                   "per_visit": fmt_money}), note="Not affected by zone or bank.")
+    visits = Chart("demand-visits", "Recorded visits and wagering per visit", fig3, "mart_visits_month",
+                   subtitle="Blue: number of loyalty-card visits. Orange: average dollars wagered per recorded visit. "
+                            "Both start at 100 in the first selected month; 90 means 10% below that month's value. Visits are grouped by the month they began.",
+                   table=table(v.rename(columns={'month_start':'Visit start month','visits':'Recorded visits',
+                       'coin_in':'Total wagered on recorded visits','per_visit':'Average wagered per visit'}),
+                       {'Visit start month':lambda d:f'{d:%B}','Recorded visits':fmt_num,
+                        'Total wagered on recorded visits':fmt_money,'Average wagered per visit':fmt_money}),
+                   note="Whole months; not affected by zone or bank.")
 
     wk = daily.groupby("weekday_index").agg(c=("coin_in", "sum"), md=("machine_days", "sum")).reset_index()
     wk["per_md"] = wk.c / wk.md
@@ -673,50 +382,23 @@ def demand(f: Filters) -> dict:
                           hovertemplate="%{customdata}: %{y:$,.0f} per machine-day<extra></extra>"))
     money_axis(fig4, title="Coin-in per machine-day")
     weekday = Chart("demand-weekday", "Demand by day of the week", fig4, "mart_machine_daily",
-                    subtitle="The weekly rhythm the forecast in chapter 6 is built on.",
-                    table=table(wk[["weekday", "per_md"]], {"per_md": fmt_money}), wide=True)
-
-    w, p = f.where(location=False)
-    fm = query(f"""SELECT machine_id, arg_max(x_m, gaming_date) x, arg_max(y_m, gaming_date) y,
-                          arg_max(zone_id, gaming_date) zone_id, arg_max(zone_name, gaming_date) zone_name,
-                          arg_max(bank_id, gaming_date) bank_id,
-                          SUM(theo_usd) / NULLIF(SUM(available_seconds) / 3600.0, 0) theo_per_hr
-                   FROM {T('mart_machine_daily')} WHERE {w} GROUP BY machine_id""", p).dropna(subset=["x", "y"])
-    fig5 = figure(height=440, legend=False)
-    sel = (fm.zone_id == f.zone) & ((fm.bank_id == f.bank) if f.bank else True) if f.zone else pd.Series(True, index=fm.index)
-    for mask, op in [(~sel, 0.18), (sel, 1)]:
-        d = fm[mask]
-        if d.empty:
-            continue
-        fig5.add_trace(go.Scatter(
-            x=d.x, y=d.y, mode="markers", opacity=op,
-            marker=dict(color=d.theo_per_hr, colorscale=SEQ_BLUE, cmin=fm.theo_per_hr.min(),
-                        cmax=fm.theo_per_hr.max(), size=12, symbol="square", line=dict(color=SURFACE, width=1),
-                        showscale=bool(op == 1),
-                        colorbar=dict(title=dict(text="Theo / open hr", side="right"), tickprefix="$",
-                                      outlinewidth=0, thickness=10)),
-            customdata=d[["machine_id", "zone_name", "bank_id"]],
-            hovertemplate="<b>%{customdata[0]}</b>, %{customdata[1]} bank %{customdata[2]}<br>"
-                          "%{marker.color:$,.2f} theo per open hour<extra></extra>"))
-    for z, g in fm.groupby("zone_name"):
-        fig5.add_annotation(x=g.x.mean(), y=g.y.max() + 4, text=z, showarrow=False,
-                            font=dict(size=11, color=INK_2), yanchor="bottom")
-    fig5.update_layout(xaxis=dict(visible=False), yaxis=dict(visible=False, scaleanchor="x"),
-                       margin=dict(l=4, r=4, t=8, b=4))
-    floor_map = Chart("demand-map", "The floor, by expected win per open hour", fig5,
-                      "mart_machine_daily (x_m, y_m)",
-                      subtitle="Each square is a machine in its slot. Darker squares should earn more for "
-                               "every hour they're open.", wide=True)
+                    table=table(wk[["weekday", "per_md"]].rename(columns={'weekday':'Weekday','per_md':'Wagered per machine-day'}),
+                                {'Wagered per machine-day':fmt_money}), wide=True)
 
     wz, pz = f.where(location=False)
     zd = query(f"""SELECT zone_name, date_trunc('week', gaming_date) AS week, COUNT(DISTINCT gaming_date) AS days,
-                          SUM(theo_usd) theo, SUM(available_seconds) avail, SUM(entries_observed) entries,
+                          SUM(house_win_usd) house_win, SUM(available_seconds) avail, SUM(entries_observed) entries,
                           SUM(counter_observed_seconds) obs, SUM(counter_expected_seconds) exp
                    FROM {T('mart_zone_daily')} WHERE {wz} GROUP BY 1, 2 ORDER BY 2""", pz)
-    zd = _full_weeks(zd[zd.days == 7] if (zd.days == 7).any() else zd, "week", f)
-    zd["theo_per_hr"] = zd.theo / (zd.avail / 3600)
+    complete=(zd.days==7)&(zd.week>=pd.Timestamp(f.start))&(zd.week+pd.Timedelta(days=6)<=pd.Timestamp(f.end))
+    weekly_scope='Complete Monday–Sunday weeks.' if complete.any() else 'Partial weeks; rates use observed hours.'
+    zd=zd[complete].copy() if complete.any() else zd.copy()
+    zd["win_per_hr"] = zd.house_win / (zd.avail / 3600).replace(0,float('nan'))
     zd["entries_per_hr"] = zd.entries / (zd.obs / 3600).where(zd.obs > 0)
-    zd["coverage"] = zd.obs / zd.exp
+    zd["coverage"] = zd.obs / zd.exp.replace(0,float('nan'))
+    zd['available_hours']=zd.avail/3600
+    zd['counter_hours']=zd.obs/3600
+    zd['expected_counter_hours']=zd.exp/3600
     zones = sorted(zd.zone_name.unique())
     sel_zone = zone_name(f.zone) if f.zone else None
 
@@ -731,18 +413,26 @@ def demand(f: Filters) -> dict:
         fg.update_layout(yaxis_title_text=title)
         return fg
 
-    fz = zone_lines("theo_per_hr", "%{y:$,.2f}", "Theo per open hour")
+    fz = zone_lines("win_per_hr", "%{y:$,.2f}<extra></extra>", "Actual house win per available hour")
     fz.update_layout(yaxis_tickprefix="$")
     zone_demand = Chart("demand-zones", "Week by week, zone by zone", fz, "mart_zone_daily",
-                        subtitle="Full weeks only. Pick a zone in the filter to light it up.",
-                        table=table(zd[["zone_name", "week", "theo_per_hr", "entries_per_hr", "coverage"]],
-                                    {"week": lambda d: f"{d:%b %d}", "theo_per_hr": lambda x: fmt_money(x, 2),
-                                     "entries_per_hr": lambda x: fmt_num(x, 1), "coverage": fmt_pct}))
+                        subtitle=weekly_scope+' Actual wagers minus payouts per available hour. Selected zone is highlighted; bank filters do not apply.',
+                        table=table(zd[['zone_name','week','days','house_win','available_hours','win_per_hr']].rename(columns={
+                            'zone_name':'Zone','week':'Week starting','days':'Observed gaming days','house_win':'Actual house win',
+                            'available_hours':'Available machine-hours','win_per_hr':'Actual house win per hour'}),
+                            {'Week starting':lambda d:f'{d:%b %d}','Actual house win':fmt_money,
+                             'Available machine-hours':lambda v:fmt_num(v,1),'Actual house win per hour':lambda v:fmt_money(v,2)}))
     traffic = Chart("demand-traffic", "Foot traffic by zone", zone_lines("entries_per_hr", "%{y:,.1f}",
                                                                           "Entries per counter hour"),
                     "mart_zone_daily",
                     subtitle="Door counts, not unique visitors, and seated players aren't counted. Hours with "
-                             "the counter offline are left out, not counted as zero.")
+                             "the counter offline are left out, not counted as zero. "+weekly_scope,
+                    table=table(zd[['zone_name','week','entries','counter_hours','expected_counter_hours','entries_per_hr','coverage']].rename(columns={
+                        'zone_name':'Zone','week':'Week starting','entries':'Observed entries','counter_hours':'Observed counter-hours',
+                        'expected_counter_hours':'Expected counter-hours','entries_per_hr':'Entries per counter-hour','coverage':'Counter coverage'}),
+                        {'Week starting':lambda d:f'{d:%b %d}','Observed entries':fmt_num,
+                         'Observed counter-hours':lambda v:fmt_num(v,1),'Expected counter-hours':lambda v:fmt_num(v,1),
+                         'Entries per counter-hour':lambda v:fmt_num(v,1),'Counter coverage':fmt_pct}))
 
     k = floor_kpis(f)
     first_last = mon.iloc[[0, -1]] if len(mon) > 1 else None
@@ -751,9 +441,7 @@ def demand(f: Filters) -> dict:
     best = wk.sort_values("per_md").iloc[-1] if len(wk) else None
     return {
         "headline": demand_story(f),
-        "lede": "Demand is coin-in per machine-day, so adding, removing or breaking machines doesn't "
-                "masquerade as a change in players. Outside benchmarks separate a market-wide swing "
-                "from one that's ours.",
+        'compact':True,
         "rail": [
             tile("Coin-in per machine-day", fmt_money(k["coin_in"] / k["machine_days"] if k["machine_days"] else None),
                  f.period_label),
@@ -765,10 +453,7 @@ def demand(f: Filters) -> dict:
                  "Coin-in on a loyalty card"),
             tile("Event days", str(int(daily.events_active.notna().sum())), "In the period"),
         ],
-        "sections": [{"charts": [trend, bench, visits, floor_map, zone_demand, traffic, weekday]}],
-        "meaning": "If the floor moved with Missouri and Las Vegas, the cause is the season or the city, "
-                   "and no floor change will fix it. A quiet zone that stays quiet while others move is "
-                   "a location problem the budget can act on.",
+        "sections": [{"charts": [trend, bench, visits, zone_demand, traffic, weekday]}],
     }
 
 
@@ -779,9 +464,9 @@ def _downtime(f: Filters) -> pd.DataFrame:
     w, p = f.where()
     dh = query(f"""SELECT gaming_date, local_hour, machine_id, zone_id, bank_id, manufacturer,
                           downtime_seconds, fault_downtime_seconds, planned_downtime_seconds,
-                          estimated_lost_theo_usd, lost_theo_low_usd, lost_theo_high_usd, hidden_downtime_flag
+                          estimated_lost_theo_usd, lost_theo_low_usd, lost_theo_high_usd
                    FROM {T('mart_downtime_hourly')}
-                   WHERE {w} AND (downtime_seconds > 0 OR hidden_downtime_flag)""", p)
+                   WHERE {w} AND downtime_seconds > 0""", p)
     dh["weekday"] = pd.to_datetime(dh.gaming_date).dt.day_name()
     dh["shift"] = dh.local_hour.map(shift_of)
     return dh
@@ -800,150 +485,13 @@ def _tickets(f: Filters) -> pd.DataFrame:
 
 
 def downtime_story(f: Filters, dh: pd.DataFrame | None = None) -> str:
-    dh = _downtime(f) if dh is None else dh
-    lost = dh.estimated_lost_theo_usd.sum()
-    if not lost:
-        return "No downtime was recorded in this selection."
-    by_shift = dh.groupby("shift").estimated_lost_theo_usd.sum()
-    peak = dh.groupby(["weekday", "local_hour"]).estimated_lost_theo_usd.sum().idxmax()
-    return (f"Downtime cost an estimated {fmt_short_money(lost)} in expected win "
-            f"({fmt_short_money(dh.lost_theo_low_usd.sum())} to {fmt_short_money(dh.lost_theo_high_usd.sum())}). "
-            f"The {by_shift.idxmax().lower()} shift carries {by_shift.max() / lost:.0%} of it, and "
-            f"{peak[0]}s around {_hour_label(int(peak[1]))} are the costliest hour of the week.")
+    from .downtime_view import headline
+    return headline(f, dh)
 
 
 def downtime(f: Filters) -> dict:
-    dh = _downtime(f)
-    t = _tickets(f)
-    if f.zone:
-        t = t[t.zone_id == f.zone]
-    if f.bank:
-        t = t[t.bank_id == f.bank]
-    faults = t[t.controllable_fault.fillna(False).astype(bool)]
-
-    hours = list(range(6, 24)) + list(range(0, 6))      # gaming day runs 6 a.m. to 6 a.m.
-    hm = dh.groupby(["weekday", "local_hour"]).estimated_lost_theo_usd.sum().unstack("local_hour") \
-        .reindex(index=_ordered(dh.weekday, WEEKDAYS), columns=hours).fillna(0)
-    fig = figure(height=320, legend=False)
-    fig.add_trace(go.Heatmap(z=hm.values, x=[_hour_label(h) for h in hours], y=hm.index, colorscale=SEQ_BLUE,
-                             xgap=2, ygap=2,
-                             colorbar=dict(title=dict(text="Lost theo", side="right"), tickprefix="$",
-                                           tickformat="~s", outlinewidth=0, thickness=10),
-                             hovertemplate="%{y}, %{x}<br>Lost theo %{z:$,.0f}<extra></extra>"))
-    fig.update_layout(xaxis=dict(showgrid=False, linecolor="rgba(0,0,0,0)", ticks="", tickangle=0, dtick=3,
-                                 type="category"),
-                      yaxis=dict(showgrid=False, autorange="reversed"))
-    heat = Chart("downtime-heat", "When outages cost the most", fig, "mart_downtime_hourly",
-                 subtitle="Expected win lost while machines were down, by gaming day and hour. The gaming "
-                          "day runs 6 a.m. to 6 a.m., so late-night hours belong to the evening before. "
-                          "Stronger color means more play lost.",
-                 table=table(hm.reset_index().melt(id_vars="weekday", var_name="hour", value_name="lost_theo_usd"),
-                             {"lost_theo_usd": fmt_money}), wide=True)
-
-    dh["month"] = pd.to_datetime(dh.gaming_date).dt.to_period("M").dt.start_time
-    mo = dh.groupby("month")[["estimated_lost_theo_usd", "lost_theo_low_usd", "lost_theo_high_usd"]].sum().reset_index()
-    fig2 = figure(height=300, legend=False)
-    fig2.add_trace(go.Bar(x=mo.month, y=mo.estimated_lost_theo_usd, marker_color=BLUE,
-                          error_y=dict(type="data", symmetric=False,
-                                       array=mo.lost_theo_high_usd - mo.estimated_lost_theo_usd,
-                                       arrayminus=mo.estimated_lost_theo_usd - mo.lost_theo_low_usd,
-                                       color=INK_2, thickness=1.5, width=4),
-                          hovertemplate="%{x|%B}: %{y:$,.0f}<extra></extra>"))
-    money_axis(fig2, title="Lost theo")
-    fig2.update_layout(xaxis=dict(tickformat="%b", dtick="M1"))
-    by_month = Chart("downtime-month", "Lost play by month", fig2, "mart_downtime_hourly",
-                     subtitle="Whiskers show the estimate's range from the fake-outage test.",
-                     table=table(mo, {"month": lambda v: f"{v:%B}", "estimated_lost_theo_usd": fmt_money,
-                                      "lost_theo_low_usd": fmt_money, "lost_theo_high_usd": fmt_money}))
-
-    mf = dh.groupby("manufacturer").agg(lost=("estimated_lost_theo_usd", "sum"), low=("lost_theo_low_usd", "sum"),
-                                        high=("lost_theo_high_usd", "sum"), hrs=("downtime_seconds", "sum"),
-                                        machines=("machine_id", "nunique")).reset_index().sort_values("lost")
-    mf["hrs"] /= 3600
-    fig3 = figure(height=300, legend=False)
-    fig3.add_trace(go.Scatter(x=mf.lost, y=mf.manufacturer, mode="markers",
-                              marker=dict(color=BLUE, size=11, line=dict(color=SURFACE, width=2)),
-                              error_x=dict(type="data", symmetric=False, array=mf.high - mf.lost,
-                                           arrayminus=mf.lost - mf.low, color=BLUE, thickness=2, width=6),
-                              customdata=mf[["low", "high", "hrs", "machines"]],
-                              hovertemplate="<b>%{y}</b><br>Lost theo %{x:$,.0f}<br>Range %{customdata[0]:$,.0f} "
-                                            "to %{customdata[1]:$,.0f}<br>%{customdata[2]:,.0f} hours down across "
-                                            "%{customdata[3]} machines<extra></extra>"))
-    money_axis(fig3, "xaxis", "Lost theo")
-    fig3.update_layout(xaxis=dict(showgrid=True, gridcolor=GRID, rangemode="tozero"), yaxis=dict(showgrid=False))
-    by_mfr = Chart("downtime-mfr", "By manufacturer", fig3, "mart_downtime_hourly",
-                   subtitle="If one maker dominates, preventive maintenance for that maker is the fix.",
-                   table=table(mf, {"lost": fmt_money, "low": fmt_money, "high": fmt_money, "hrs": fmt_num}))
-
-    shifts = [s for s, *_ in SHIFTS]
-    rs = faults.groupby("shift").agg(tickets=("operation_id", "count"), response=("response_hours", "median"),
-                                     repair=("repair_hours", "median")).reindex(shifts).reset_index()
-    lost_shift = dh.groupby("shift").estimated_lost_theo_usd.sum().reindex(shifts)
-    fig4 = figure(height=300, barmode="group")
-    fig4.add_trace(go.Bar(x=rs["shift"], y=rs.response * 60, name="Waiting for a technician", marker_color=SERIES[0],
-                          hovertemplate="%{x}: %{y:.0f} min to start work<extra></extra>"))
-    fig4.add_trace(go.Bar(x=rs["shift"], y=rs.repair * 60, name="Repair itself", marker_color=SERIES[1],
-                          hovertemplate="%{x}: %{y:.0f} min to repair<extra></extra>"))
-    fig4.update_layout(yaxis_title_text="Median minutes per fault")
-    response = Chart("downtime-response", "Slow to respond, or slow to fix?", fig4, "mart_tickets",
-                     subtitle="A long wait points to staffing (add a technician). A long repair points to the "
-                              "machines (preventive maintenance).",
-                     table=table(rs.assign(lost_theo=rs["shift"].map(lost_shift)),
-                                 {"response": lambda v: fmt_num(v, 2), "repair": lambda v: fmt_num(v, 2),
-                                  "lost_theo": fmt_money}))
-
-    tc = t.groupby("type").size().sort_values()
-    fig5 = figure(height=300, legend=False)
-    fig5.add_trace(go.Bar(y=tc.index, x=tc.values, orientation="h",
-                          marker_color=[BLUE if ty == EVENT_TYPES["fault_repair"] else MUTED for ty in tc.index],
-                          hovertemplate="%{y}: %{x} tickets<extra></extra>"))
-    fig5.update_layout(xaxis=dict(showgrid=True, gridcolor=GRID, title_text="Tickets"), yaxis=dict(showgrid=False))
-    kinds = Chart("downtime-kinds", "What kind of downtime", fig5, "mart_tickets",
-                  subtitle="Only fault repairs (in blue) are something a technician or maintenance can cut.",
-                  table=table(tc.rename("Tickets").rename_axis("Type").reset_index()))
-
-    wk = faults.assign(week=pd.to_datetime(faults.gaming_date).dt.to_period("W-SUN").dt.start_time) \
-        .groupby("week").size().rename("faults").reset_index()
-    wk = _full_weeks(wk, "week", f)
-    fig6 = figure(height=260, legend=False, hovermode="x unified")
-    fig6.add_trace(go.Scatter(x=wk.week, y=wk.faults, mode="lines+markers", line=dict(color=BLUE, width=2),
-                              marker=dict(size=7), hovertemplate="Week of %{x|%b %d}: %{y} faults<extra></extra>"))
-    fig6.update_layout(yaxis=dict(title_text="Fault repairs per week", rangemode="tozero"))
-    weekly = Chart("downtime-weekly", "Faults week by week", fig6, "mart_tickets",
-                   subtitle="A steady climb suggests wear; a single spike suggests one event.", wide=True)
-
-    top = dh.groupby(["machine_id", "manufacturer"]).agg(
-        down=("downtime_seconds", "sum"), hidden=("hidden_downtime_flag", "sum"),
-        lost=("estimated_lost_theo_usd", "sum")).reset_index().sort_values("lost", ascending=False).head(15)
-    top = top.merge(positions()[["machine_id", "zone_name"]], on="machine_id", how="left")
-    top_t = pd.DataFrame({"Machine": top.machine_id, "Zone": top.zone_name, "Maker": top.manufacturer,
-                          "Hours down": top.down / 3600, "Hidden-downtime hours": top.hidden, "Lost theo": top.lost})
-    return {
-        "headline": downtime_story(f, dh),
-        "lede": "Lost play is valued in theo, the win the house expected, using neighbours in the same "
-                "zone and hour as the yardstick. A lucky or unlucky stretch can't inflate it.",
-        "rail": [
-            tile("Lost theo", fmt_short_money(dh.estimated_lost_theo_usd.sum()),
-                 f"{fmt_short_money(dh.lost_theo_low_usd.sum())} to {fmt_short_money(dh.lost_theo_high_usd.sum())}"),
-            tile("Machine-hours down", fmt_num(dh.downtime_seconds.sum() / 3600), f.period_label),
-            tile("Hidden-downtime hours", fmt_num(dh.hidden_downtime_flag.sum()),
-                 "Open, idle, neighbours busy"),
-            tile("Fault repairs", fmt_num(len(faults)), f"{plural(len(t), 'ticket')} in all"),
-            tile("Median wait, then fix", f"{fmt_num(faults.response_hours.median() * 60)} + "
-                                          f"{fmt_num(faults.repair_hours.median() * 60)} min", "Per fault"),
-        ],
-        "sections": [
-            {"charts": [heat, by_month, by_mfr, response, kinds, weekly]},
-            {"title": "Machines losing the most play", "source": "mart_downtime_hourly",
-             "blocks": [table(top_t, {"Hours down": lambda v: fmt_num(v, 1), "Lost theo": fmt_money},
-                              {"Machine": lambda r: machine_link(f)(r.Machine)})]},
-        ],
-        "meaning": "If one shift waits longest, a technician on that shift buys back the most play. If one "
-                   "manufacturer breaks most, maintenance for that maker does. Hidden-downtime hours are "
-                   "leads to check, not counted losses.",
-        "scope_note": "Hidden downtime is a candidate flag and isn't added to measured losses. "
-                      "Hours where no estimate was possible are left out of the totals rather than counted as zero.",
-    }
+    from .downtime_view import build
+    return build(f)
 
 
 # =========================================================================================
@@ -955,7 +503,8 @@ def _player_totals(f: Filters) -> dict:
         WITH p AS (SELECT player_id, SUM(actual_tracked_loss_usd) loss, SUM(theo_usd) theo,
                           BOOL_OR(above_expected_loss_flag) heavy
                    FROM {T('mart_player_month')} WHERE {w} GROUP BY player_id)
-        SELECT COUNT(*) players, SUM(CASE WHEN loss < 0 THEN 1 ELSE 0 END) winners, SUM(loss) loss,
+        SELECT COUNT(*) players, COUNT(*) FILTER(WHERE heavy IS NOT NULL) protective_evaluated,
+               SUM(CASE WHEN loss < 0 THEN 1 ELSE 0 END) winners, SUM(loss) loss,
                SUM(theo) theo, SUM(CASE WHEN heavy THEN 1 ELSE 0 END) heavy FROM p""", p).iloc[0].to_dict()
     curve = query(f"""
         WITH p AS (SELECT player_id, SUM(actual_tracked_loss_usd) loss FROM {T('mart_player_month')}
@@ -976,8 +525,8 @@ def guests_story(f: Filters, tot: dict | None = None) -> str:
     if not tot["players"]:
         return "No card holders match this selection."
     diff = tot["loss"] - tot["theo"]
-    return (f"Card holders lost {fmt_short_money(tot['loss'])} against an expected {fmt_short_money(tot['theo'])}, "
-            f"so luck ran {fmt_short_money(abs(diff))} in the {'house' if diff > 0 else 'players'}' favour. "
+    return (f"Card holders lost {fmt_short_money(tot['loss'])} against a modeled expectation of {fmt_short_money(tot['theo'])}, "
+            f"a difference of {fmt_short_money(abs(diff))} {'above' if diff > 0 else 'below'} that estimate. "
             f"The top 10% of players produced {fmt_pct(tot['top10'], 0)} of the house's net win, and "
             f"{tot['winners'] / tot['players']:.0%} of players came out ahead.")
 
@@ -987,8 +536,13 @@ def comps_story(f: Filters, ct: pd.DataFrame) -> str:
                    per_coin=ct.comp_cost_usd / ct.tracked_coin_in_usd.where(ct.tracked_coin_in_usd > 0))
     cand = ct[ct.policy_change_candidate.fillna(False).astype(bool)]
     tot = ct[["comp_cost_usd", "actual_tracked_loss_usd", "tracked_coin_in_usd"]].sum()
-    base = (f"Comps cost {100 * tot.comp_cost_usd / tot.actual_tracked_loss_usd:.1f}¢ for every $1 players lost "
-            f"and {100 * tot.comp_cost_usd / tot.tracked_coin_in_usd:.2f}¢ per $1 wagered.")
+    per_loss=100*tot.comp_cost_usd/tot.actual_tracked_loss_usd if tot.actual_tracked_loss_usd>0 else None
+    per_coin=100*tot.comp_cost_usd/tot.tracked_coin_in_usd if tot.tracked_coin_in_usd>0 else None
+    base=(f"Player compensation cost {per_loss:.1f}¢ per $1 lost by loyalty players" if per_loss is not None else
+          'Compensation cost per $1 lost is unavailable because net player losses are zero or negative')
+    base+=(f" and {per_coin:.2f}¢ per $1 they wagered." if per_coin is not None else '. Cost per $1 wagered is unavailable.')
+    if not ct.policy_change_candidate.notna().any():
+        return base+' Policy-change detection is not available for this selection.'
     if cand.empty:
         return base + " No change shows up in both measures, so nothing points to a policy shift."
     c = cand.iloc[0]
@@ -1000,7 +554,7 @@ def comps_story(f: Filters, ct: pd.DataFrame) -> str:
     b_l, a_l = r(before, "comp_cost_usd", "actual_tracked_loss_usd"), r(after, "comp_cost_usd", "actual_tracked_loss_usd")
     b_c, a_c = r(before, "comp_cost_usd", "tracked_coin_in_usd"), r(after, "comp_cost_usd", "tracked_coin_in_usd")
     both = (a_l > b_l) == (a_c > b_c)
-    return (f"{c.opening_tier} comps went from {100 * b_l:.1f}¢ to {100 * a_l:.1f}¢ per $1 lost after "
+    return (f"{c.opening_tier} player compensation went from {100 * b_l:.1f}¢ to {100 * a_l:.1f}¢ per $1 lost after "
             f"{pd.Timestamp(c.month_start):%B}, and per $1 wagered moved {'the same way' if both else 'the other way'} "
             f"({100 * b_c:.2f}¢ to {100 * a_c:.2f}¢). "
             + ("That looks like a policy change, not luck." if both else "That looks like luck in players' results, not a policy change."))
@@ -1016,7 +570,7 @@ def guests(f: Filters) -> dict:
     mon["winner_share"] = mon.winners / mon.player_months
 
     fig = figure(height=320, hovermode="x unified")
-    fig.add_trace(go.Scatter(x=mon.month_start, y=mon.theo, name="Expected loss (theo)", mode="lines+markers",
+    fig.add_trace(go.Scatter(x=mon.month_start, y=mon.theo, name="Theoretical player loss (estimate)", mode="lines+markers",
                              line=dict(color=MUTED, width=2), marker=dict(size=8), hovertemplate="%{y:$,.0f}"))
     fig.add_trace(go.Scatter(x=mon.month_start, y=mon.loss, name="Actual loss", mode="lines+markers",
                              line=dict(color=BLUE, width=2), marker=dict(size=8), hovertemplate="%{y:$,.0f}"))
@@ -1024,10 +578,13 @@ def guests(f: Filters) -> dict:
     fig.update_layout(xaxis=dict(tickformat="%b", dtick="M1"))
     trend = Chart("guests-trend", f"What players lost, against what the math expected", fig,
                   "mart_player_month", wide=True,
-                  subtitle="The gap between the lines is luck, month by month.",
-                  table=table(mon, {"month_start": lambda v: f"{v:%B}", "coin_in": fmt_money, "payout": fmt_money,
-                                    "loss": fmt_money, "theo": fmt_money, "winner_share": fmt_pct,
-                                    "player_months": fmt_num, "winners": fmt_num}))
+                  subtitle="Loyalty-card players only. Actual net losses compared with modeled expected losses; their difference does not identify its cause.",
+                  table=table(mon.rename(columns={'month_start':'Month','player_months':'Recorded player-months',
+                      'coin_in':'Wagered','payout':'Paid back','loss':'Actual player net loss','theo':'Theoretical player loss (estimate)',
+                      'winners':'Players ending month ahead','winner_share':'Share ending month ahead'}),
+                      {'Month':lambda v:f'{v:%B}','Wagered':fmt_money,'Paid back':fmt_money,'Actual player net loss':fmt_money,
+                       'Theoretical player loss (estimate)':fmt_money,'Share ending month ahead':fmt_pct,
+                       'Recorded player-months':fmt_num,'Players ending month ahead':fmt_num}))
 
     def seg_bar(col, field, order, cid, title):
         sw, sp = f.where_month(guests=True, skip=(field,))
@@ -1044,10 +601,14 @@ def guests(f: Filters) -> dict:
                                           "<extra></extra>"))
         money_axis(fg, title="Loss per player-month")
         fg.update_layout(xaxis=dict(type="category"))
+        segment={'opening_tier':'Opening loyalty tier','age_band':'Age band','home_region':'Home region'}[col]
         return Chart(cid, title, fg, "mart_player_month", third=True,
-                     table=table(g, {"loss": fmt_money, "players": fmt_num, "per_pm": fmt_money}))
+                     subtitle=('Average actual net loss per loyalty player-month. Opening tier is the tier at the start of the year; promotions do not move players between groups.' if col=='opening_tier' else
+                               'Average actual net loss per loyalty player-month.'),
+                     table=table(g.rename(columns={'seg':segment,'loss':'Actual player net loss','players':'Distinct loyalty players',
+                         'per_pm':'Net loss per player-month'}),{'Actual player net loss':fmt_money,'Distinct loyalty players':fmt_num,'Net loss per player-month':fmt_money}))
 
-    by_tier = seg_bar("opening_tier", "tier", TIER_ORDER, "guests-tier", "By opening tier")
+    by_tier = seg_bar("opening_tier", "tier", TIER_ORDER, "guests-tier", "Average loss by opening loyalty tier")
     by_age = seg_bar("age_band", "age_band", ["21-34", "35-49", "50-64", "65+", "Unknown"], "guests-age", "By age band")
     by_home = seg_bar("home_region", "home_region", ["Local", "Regional", "Domestic", "International"],
                       "guests-home", "By home region")
@@ -1058,13 +619,14 @@ def guests(f: Filters) -> dict:
                               line=dict(color=MUTED, width=1), hoverinfo="skip"))
     fig2.add_trace(go.Scatter(x=pd.concat([pd.Series([0]), cv.pct]), y=pd.concat([pd.Series([0.0]), cv.share]),
                               mode="lines", name="Actual", line=dict(color=BLUE, width=2),
-                              hovertemplate="Top %{x}% of players: %{y:.0%} of net win<extra></extra>"))
+                              hovertemplate="Top %{x:.0f}% of players: %{y:.0%} of net win<extra></extra>"))
     pct_axis(fig2, title="Share of the house's net win")
     fig2.update_layout(xaxis=dict(ticksuffix="%", title_text="Players, biggest losers first"))
     conc = Chart("guests-conc", "How concentrated the losses are", fig2, "mart_player_month",
                  subtitle="Summed per player across the selected months first. The curve can pass 100% "
                           "because players who won pull the total back down.",
-                 table=table(cv, {"share": fmt_pct}))
+                 table=table(cv.rename(columns={'pct':'Top share of players (%)','share':'Share of house net win'}),
+                     {'Top share of players (%)':fmt_num,'Share of house net win':fmt_pct}))
 
     fig3 = figure(height=280, legend=False)
     fig3.add_trace(go.Scatter(x=mon.month_start, y=mon.winner_share, mode="lines+markers",
@@ -1072,7 +634,10 @@ def guests(f: Filters) -> dict:
                               hovertemplate="%{x|%B}: %{y:.1%} ended the month ahead<extra></extra>"))
     pct_axis(fig3, title="Players ahead for the month")
     fig3.update_layout(xaxis=dict(tickformat="%b", dtick="M1"), yaxis_rangemode="tozero")
-    ahead = Chart("guests-ahead", "Who walks away ahead", fig3, "mart_player_month")
+    ahead = Chart("guests-ahead", "Who walks away ahead", fig3, "mart_player_month",
+        table=table(mon[['month_start','player_months','winners','winner_share']].rename(columns={
+            'month_start':'Month','player_months':'Recorded player-months','winners':'Players ending month ahead','winner_share':'Share ending month ahead'}),
+            {'Month':lambda d:f'{d:%B}','Recorded player-months':fmt_num,'Players ending month ahead':fmt_num,'Share ending month ahead':fmt_pct}))
 
     # ---- Q5: comps -----------------------------------------------------------------------
     wc, pc = f.where_month()
@@ -1081,9 +646,8 @@ def guests(f: Filters) -> dict:
     ct = query(f"SELECT * FROM {T('mart_comps_tier_month')} WHERE {wc} ORDER BY month_start", pc)
     wd, pd_ = f.where(location=False)
     cd = query(f"SELECT * FROM {T('mart_comps_daily')} WHERE {wd} ORDER BY gaming_date", pd_)
-    roll = lambda s: s.rolling(7, min_periods=1).sum()
-    cd["per_loss7"] = roll(cd.comp_cost_usd) / roll(cd.actual_tracked_loss_usd).where(lambda s: s > 0)
-    cd["per_coin7"] = roll(cd.comp_cost_usd) / roll(cd.tracked_coin_in_usd).where(lambda s: s > 0)
+    from .player_compensation import rolling_rates
+    cd=rolling_rates(cd)
     changes = cd[cd.policy_change_candidate.fillna(False).astype(bool)].gaming_date
 
     def rate_chart(col, cid, title, axis, sub):
@@ -1095,12 +659,23 @@ def guests(f: Filters) -> dict:
         fg.add_trace(go.Scatter(x=cd.gaming_date, y=cd[col] * 100, mode="lines", line=dict(color=BLUE, width=2),
                                 hovertemplate="%{y:.2f}¢<extra></extra>"))
         fg.update_layout(yaxis=dict(title_text=axis, ticksuffix="¢"))
-        return Chart(cid, title, fg, "mart_comps_daily", subtitle=sub)
+        denominator='loss7' if col=='per_loss7' else 'wagers7'
+        denominator_label='Loyalty player net loss (window)' if col=='per_loss7' else 'Loyalty player wagers (window)'
+        rate_label='Compensation cents per $1 lost' if col=='per_loss7' else 'Compensation cents per $1 wagered'
+        numbers=cd[['gaming_date','window_start','window_days','cost7',denominator,col]].copy()
+        numbers[col]*=100
+        numbers['status']=numbers[denominator].map(lambda v:'Available' if pd.notna(v) and v>0 else 'Unavailable: zero or negative denominator')
+        numbers.columns=['Window ending','Window starting','Gaming days in window','Player compensation cost (window)',denominator_label,rate_label,'Rate status']
+        return Chart(cid, title, fg, "mart_comps_daily", subtitle=sub,
+            table=table(numbers,{'Window ending':lambda v:f'{v:%b %d}','Window starting':lambda v:f'{v:%b %d}',
+                'Player compensation cost (window)':fmt_money,denominator_label:fmt_money,
+                rate_label:lambda v:'–' if pd.isna(v) else f'{v:.2f}¢'}),
+            note='All loyalty-card players; tier, age and home-region filters do not apply to these daily rates.')
 
-    per_loss = rate_chart("per_loss7", "comps-loss", "Comp cost per $1 players lost", "Cents, 7-day",
-                          "The headline rate. It swings with players' luck, so read it with the chart beside it.")
-    per_coin = rate_chart("per_coin7", "comps-coin", "Comp cost per $1 wagered", "Cents, 7-day",
-                          "Steadier, because wagers don't depend on luck. A change in both is a real change.")
+    per_loss = rate_chart("per_loss7", "comps-loss", "Player compensation cost per $1 lost", "Cents per $1 lost",
+                          "Loyalty players only. Compensation cost ÷ actual net player losses × 100, over up to 7 gaming days ending on each date. Missing when net losses are zero or negative.")
+    per_coin = rate_chart("per_coin7", "comps-coin", "Player compensation cost per $1 wagered", "Cents per $1 wagered",
+                          "Loyalty players only. Compensation cost ÷ recorded wagering × 100, over the same rolling window. Tables show the numerator and denominator for every point.")
 
     tiers = _ordered(ct.opening_tier, TIER_ORDER)
     fig4 = figure(height=300, hovermode="x unified")
@@ -1120,16 +695,23 @@ def guests(f: Filters) -> dict:
                                       hoverinfo="skip"))
     fig4.update_layout(yaxis=dict(title_text="Cents per $1 lost", ticksuffix="¢"),
                        xaxis=dict(tickformat="%b", dtick="M1"))
-    tier_rate = Chart("comps-tier", "By opening tier", fig4, "mart_comps_tier_month",
-                      subtitle="Players stay in the tier they opened the year in, so each line is a fixed group. "
-                               "Diamonds mark candidate changes.",
+    ct['cost_per_loss_cents']=100*ct.comp_cost_per_actual_loss
+    ct['cost_per_wager_cents']=100*ct.comp_cost_per_coin_in
+    tier_rate = Chart("comps-tier", "Compensation cents per $1 lost · opening loyalty tier", fig4, "mart_comps_tier_month",
+                      subtitle="Each line is a starting-tier group: monthly reward cost per $1 those loyalty players lost. For example, 5¢ means $5 of compensation cost per $100 net loss. Groups stay fixed despite later promotions; diamonds mark evaluated candidate changes.",
                       table=table(ct[["opening_tier", "month_start", "active_players", "comp_cost_usd",
-                                      "actual_tracked_loss_usd", "tracked_coin_in_usd", "comp_cost_per_actual_loss",
-                                      "comp_cost_per_coin_in", "policy_change_candidate"]],
-                                  {"month_start": lambda v: f"{v:%b}", "comp_cost_usd": fmt_money,
-                                   "actual_tracked_loss_usd": fmt_money, "tracked_coin_in_usd": fmt_money,
-                                   "comp_cost_per_actual_loss": lambda v: fmt_pct(v, 1),
-                                   "comp_cost_per_coin_in": lambda v: fmt_pct(v, 2), "active_players": fmt_num}))
+                                      "actual_tracked_loss_usd", "tracked_coin_in_usd", "cost_per_loss_cents",
+                                      "cost_per_wager_cents", "policy_change_candidate"]].rename(columns={
+                            'opening_tier':'Opening loyalty tier','month_start':'Month','active_players':'Active loyalty players',
+                            'comp_cost_usd':'Player compensation cost','actual_tracked_loss_usd':'Actual player net loss',
+                            'tracked_coin_in_usd':'Loyalty player wagers','cost_per_loss_cents':'Compensation cents per $1 lost',
+                            'cost_per_wager_cents':'Compensation cents per $1 wagered','policy_change_candidate':'Candidate policy change'}),
+                            {'Month':lambda v:f'{v:%b}','Player compensation cost':fmt_money,'Actual player net loss':fmt_money,
+                             'Loyalty player wagers':fmt_money,'Active loyalty players':fmt_num,
+                             'Compensation cents per $1 lost':lambda v:'–' if pd.isna(v) else f'{v:.2f}¢',
+                             'Compensation cents per $1 wagered':lambda v:'–' if pd.isna(v) else f'{v:.2f}¢',
+                             'Candidate policy change':lambda v:'Not evaluated' if pd.isna(v) else ('Yes' if v else 'No')}),
+                      note='Opening-tier filter applies; age and home-region filters do not.')
 
     pts = ct.groupby("month_start").agg(earned=("points_earned", "sum"), redeemed=("points_redeemed", "sum"),
                                         balance=("points_balance_end", "sum")).reset_index()
@@ -1140,21 +722,22 @@ def guests(f: Filters) -> dict:
                           hovertemplate="%{y:,.0f} redeemed<extra></extra>"))
     fig5.update_layout(yaxis=dict(tickformat="~s", title_text="Points"), xaxis=dict(tickformat="%b", dtick="M1"))
     points = Chart("comps-points", "Points earned and redeemed", fig5, "mart_comps_tier_month",
-                   subtitle="Unredeemed points are a future cost, counted here in points, not dollars.",
-                   table=table(pts, {"month_start": lambda v: f"{v:%B}", "earned": fmt_num, "redeemed": fmt_num,
-                                     "balance": fmt_num}))
+                   subtitle="Loyalty reward points, not dollars. Outstanding balances do not assign a dollar value to future rewards.",
+                   table=table(pts.rename(columns={'month_start':'Month','earned':'Points earned','redeemed':'Points redeemed','balance':'Points outstanding at month end'}),
+                       {'Month':lambda v:f'{v:%B}','Points earned':fmt_num,'Points redeemed':fmt_num,'Points outstanding at month end':fmt_num}),
+                   note='Opening-tier filter applies; age and home-region filters do not.')
 
     wf, pf = f.where(location=False)
-    carded = query(f"SELECT SUM(carded_coin_in_usd) / SUM(coin_in_usd) FROM {T('mart_machine_daily')} WHERE {wf}", pf).iloc[0, 0]
+    carded = query(f"SELECT SUM(carded_coin_in_usd) / NULLIF(SUM(coin_in_usd),0) FROM {T('mart_machine_daily')} WHERE {wf}", pf).iloc[0, 0]
     ctot = ct[["comp_cost_usd", "actual_tracked_loss_usd", "tracked_coin_in_usd"]].sum()
     last_bal = ct.sort_values("month_start").groupby("opening_tier").points_balance_end.last().sum()
     has = bool(tot["players"])
     return {
         "headline": guests_story(f, tot),
-        "lede": "These pages see loyalty-card play only, so the totals are smaller than the floor's by "
-                "design. Use the guest filters to follow one group through both sections.",
+        "compact": True,
+        "lede": "Player outcomes cover loyalty-card play only. Carded share is the fraction of all floor wagering dollars recorded with a loyalty card—not the fraction of visitors. Guest filters select player outcomes; compensation chart notes identify their coverage.",
         "rail": [
-            tile("Carded share of floor play", fmt_pct(carded), "What these results describe"),
+            tile("Carded share of floor play", fmt_pct(carded), "Loyalty-card wagers ÷ all wagers; whole property"),
             tile("Wagered", fmt_short_money(mon.coin_in.sum()), f.guest_label),
             tile("Net loss", fmt_short_money(tot["loss"]), f"Expected {fmt_short_money(tot['theo'])}"),
             tile("Players ahead", fmt_pct(tot["winners"] / tot["players"] if has else None, 0),
@@ -1166,21 +749,19 @@ def guests(f: Filters) -> dict:
              "charts": [trend, by_tier, by_age, by_home, conc, ahead],
              "intro": (f"{fmt_num(tot['heavy'])} players lost more than twice their expected loss in at least "
                        "one month. That figure is for protective outreach only, never for marketing."
-                       if has else None)},
-            {"title": "The comp program", "tag": "Q5", "headline": comps_story(f, ct) if not ct.empty else None,
+                       if has and tot['protective_evaluated'] else None)},
+            {"title": "Player compensation and rewards", "tag": "Q5", "headline": comps_story(f, ct) if not ct.empty else None,
+             'intro':'Player compensation (“comps”) means complimentary loyalty rewards, such as food and drink. Cost is the recorded economic cost of redeemed rewards, not their menu value. These measures cover loyalty players only.',
              "rail": [
-                 tile("Comp cost", fmt_short_money(ctot.comp_cost_usd), "Economic cost, counted once"),
+                 tile("Player compensation cost", fmt_short_money(ctot.comp_cost_usd), "Loyalty players; selected opening tier"),
                  tile("Per $1 players lost", f"{100 * ctot.comp_cost_usd / ctot.actual_tracked_loss_usd:.1f}¢"
-                      if ctot.actual_tracked_loss_usd > 0 else "–", "Headline rate"),
+                      if ctot.actual_tracked_loss_usd > 0 else "–", "Selected loyalty opening-tier cohort"),
                  tile("Per $1 wagered", f"{100 * ctot.comp_cost_usd / ctot.tracked_coin_in_usd:.2f}¢"
-                      if ctot.tracked_coin_in_usd > 0 else "–", "Luck-free check"),
+                      if ctot.tracked_coin_in_usd > 0 else "–", "Selected loyalty opening-tier cohort"),
                  tile("Points outstanding", fmt_num(last_bal), "End of period, in points"),
              ],
              "charts": [per_loss, per_coin, tier_rate, points]},
         ],
-        "meaning": "Read the comp lines in pairs: a jump in cost per $1 lost alone is players' luck, but "
-                   "a jump in cost per $1 wagered too is the program itself. That's the case for a "
-                   "controlled comp pilot rather than a floor-wide change.",
         "guest_filters": True,
         "location_filters": False,
         "scope_note": "Monthly figures use whole months that overlap the period. Concentration and "

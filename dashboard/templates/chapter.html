@@ -57,7 +57,7 @@
     <label><span class="filter-label">Bank</span>
       <select name="bank" id="bank-select">
         <option value="">All banks</option>
-        {% for b in opts.banks %}<option value="{{ b.bank_id }}" data-zone="{{ b.zone_id }}" {% if b.bank_id == f.bank %}selected{% endif %}>{{ b.bank_id }}</option>{% endfor %}
+        {% for b in opts.banks %}<option value="{{ b.bank_id }}" data-zone="{{ b.zone_id }}" {% if b.bank_id == f.bank %}selected{% endif %}{% if f.zone and b.zone_id != f.zone %} hidden disabled{% endif %}>{{ b.bank_id }} · {{ b.machines }} machines</option>{% endfor %}
       </select></label>
   </div>
   {% endif %}
@@ -70,6 +70,20 @@
       </select></label>
   </div>
   {% else %}{{ hidden(["diag"]) }}{% endif %}
+
+  {% if page.indicator_filter %}
+  <div class="filter-group indicator-filter">
+    <label><span class="filter-label">Underperformance indicator</span>
+      <select name="indicator" aria-describedby="indicator-help">
+        <option value="">All machines</option>
+        {% for code, label, description in page.indicator_options %}
+        <option value="{{ code }}" {% if code == f.indicator %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <small id="indicator-help">{% for code, label, description in page.indicator_options if code == f.indicator %}{{ description }}{% else %}Separate, overlapping flags for below-peer earners. Definitions below the charts.{% endfor %}</small>
+  </div>
+  {% else %}{{ hidden(["indicator"]) }}{% endif %}
 
   {% if page.guest_filters %}
   <div class="filter-group">
@@ -97,8 +111,8 @@
     {% if not page.title_override %}<span class="chapter-num" aria-hidden="true">{{ meta.num }}</span>{% endif %}
     <span class="chapter-title">{{ page.title_override or meta.title }}</span>
   </h1>
-  {% if not page.title_override %}<p class="question"><span class="qtag">{{ meta.tag }}</span> {{ meta.question }}</p>{% endif %}
-  <p class="headline">{{ page.headline }}</p>
+  {% if not page.title_override and not page.compact %}<p class="question"><span class="qtag">{{ meta.tag }}</span> {{ meta.question }}</p>{% endif %}
+  {% if page.headline %}<p class="headline">{{ page.headline }}</p>{% endif %}
   {% if page.lede %}<p class="lede">{{ page.lede }}</p>{% endif %}
   {% if not page.no_filters %}
   <p class="scope">
@@ -130,10 +144,15 @@
         <h3>{{ c.title }}</h3>
         {% if c.subtitle %}<p>{{ c.subtitle }}</p>{% endif %}
       </figcaption>
-      <div class="plot" data-fig="fig-{{ c.id }}" role="img" aria-label="{{ c.title }}. A table version follows."></div>
+      <div class="plot" data-fig="fig-{{ c.id }}"{% if c.extra.click_href_index is defined %} data-click-href-index="{{ c.extra.click_href_index }}"{% endif %} role="img" aria-label="{{ c.title }}. A table version follows."></div>
       <script type="application/json" id="fig-{{ c.id }}">{{ c.spec }}</script>
       <footer class="panel-foot">
-        <span class="source">From {{ c.source }}{% if c.note %}. {{ c.note }}{% endif %}</span>
+        <span class="source">Source: {{ c.source|source_label }}{% if c.note %}. {{ c.note }}{% endif %}</span>
+        {% if c.extra.event_key %}
+        <details class="event-key"><summary>Event key</summary>
+          <ol>{% for event in c.extra.event_key %}<li value="{{ event.number }}"><span>{{ event.dates }}</span> {{ event.name }}</li>{% endfor %}</ol>
+        </details>
+        {% endif %}
         {% if c.table %}<details><summary>Show the numbers</summary>{{ c.table }}</details>{% endif %}
       </footer>
     </figure>
@@ -144,7 +163,7 @@
   {% if s.blocks %}
   <div class="panel block">
     {% for b in s.blocks %}{{ b }}{% endfor %}
-    {% if s.source %}<p class="source">From {{ s.source }}</p>{% endif %}
+    {% if s.source %}<p class="source">Source: {{ s.source|source_label }}</p>{% endif %}
   </div>
   {% endif %}
 </section>

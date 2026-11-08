@@ -226,6 +226,27 @@ main { padding: 18px 44px 72px; max-width: 1340px; width: 100%; }
 .plot { width: 100%; margin-top: 10px; min-height: 120px; }
 .panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-top: 8px; }
 .panel-foot details[open] { flex-basis: 100%; }
+.panel-foot details { min-width: 0; max-width: 100%; }
+.panel-foot details[open] { width: 100%; overflow: hidden; }
+.panel-foot .table-wrap { max-width: 100%; }
+.plot { min-width: 0; overflow: hidden; }
+.plot[data-click-href-index] .point { cursor: pointer; }
+.indicator-filter { max-width: 440px; }
+.indicator-filter small { display: block; max-width: 48ch; color: var(--chalk-3); font-size: 12px; }
+.indicator-legend { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 24px; }
+.indicator-legend dt { font-size: 14px; font-weight: 600; }
+.indicator-legend dd { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+.event-key ol { margin: 10px 0 0; padding-left: 24px; font-size: 13px; color: var(--ink-2); }
+.event-key li { margin: 6px 0; overflow-wrap: anywhere; white-space: normal; }
+.event-key li span { font-weight: 600; margin-right: 6px; }
+.operation-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.operation-type { min-width: 0; border: 1px solid var(--line); background: var(--paper-2); border-radius: 6px; padding: 14px; }
+.operation-type h3 { font-size: 15px; }
+.operation-count { margin: 6px 0 12px; font-size: 25px; font-weight: 600; }
+.operation-count small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-2); }
+.operation-type dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; margin: 0; font-size: 12px; }
+.operation-type dt { color: var(--ink-2); }
+.operation-type dd { margin: 0; font-variant-numeric: tabular-nums; }
 .source { margin: 0; font-size: 12px; color: var(--ink-3); }
 .block .source { margin-top: 10px; }
 summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }

@@ -29,8 +29,9 @@
     const fig = JSON.parse(isDark() ? raw.replace(DARK_RE, (m) => DARK[m.toLowerCase()]) : raw);
     const L = fig.layout || {};
     L.hoverlabel = Object.assign({}, L.hoverlabel, {
-      bgcolor: cssVar("--surface-2"), bordercolor: cssVar("--border-strong"),
-      font: Object.assign({}, (L.hoverlabel || {}).font, { color: cssVar("--text-primary") }),
+      bgcolor: cssVar("--paper-2") || (isDark() ? "#1c2c26" : "#ffffff"),
+      bordercolor: cssVar("--axis") || "#c9c3b6",
+      font: Object.assign({}, (L.hoverlabel || {}).font, { color: cssVar("--ink") || "#1f1d19" }),
     });
     L.paper_bgcolor = "rgba(0,0,0,0)";
     L.plot_bgcolor = "rgba(0,0,0,0)";
@@ -49,7 +50,16 @@
       if (el.clientWidth < 640 && fig.layout.annotations) {
         fig.layout.annotations = fig.layout.annotations.filter((a) => a.name !== "span-label");
       }
-      Plotly.react(el, fig.data, fig.layout, CONFIG);
+      Plotly.react(el, fig.data, fig.layout, CONFIG).then(() => {
+        if (el.dataset.clickHrefIndex === undefined || el.dataset.clickBound) return;
+        el.dataset.clickBound = "true";
+        el.on("plotly_click", (event) => {
+          const href = event.points?.[0]?.customdata?.[Number(el.dataset.clickHrefIndex)];
+          if (typeof href === "string" && /^\/machines\/[^/?]+(?:\?|$)/.test(href)) {
+            window.location.assign(href);
+          }
+        });
+      });
     });
   }
 
@@ -80,11 +90,12 @@
       [...bank.options].forEach((o) => {
         if (!o.value) return;
         o.hidden = !!zone.value && o.dataset.zone !== zone.value;
+        o.disabled = o.hidden;
       });
     };
     if (zone && bank) {
       syncBanks();
-      zone.addEventListener("change", () => { bank.value = ""; });
+      zone.addEventListener("change", () => { bank.value = ""; syncBanks(); });
       bank.addEventListener("change", () => {
         const opt = bank.selectedOptions[0];
         if (opt && opt.dataset.zone) zone.value = opt.dataset.zone;

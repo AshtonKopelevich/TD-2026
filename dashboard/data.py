@@ -69,12 +69,14 @@ def is_placeholder() -> bool:
     return override != "0" if override is not None else _is_placeholder(_db_stamp())
 
 
-@lru_cache(maxsize=4)
-def _options(_stamp: float) -> dict:
+@lru_cache(maxsize=16)
+def _options(_stamp: float, start: date = PERIOD_START, end: date = PERIOD_END) -> dict:
     zones = query(f"""SELECT zone_id, any_value(zone_name) zone_name FROM {T('mart_machine_daily')}
-                      GROUP BY zone_id ORDER BY zone_name""")
-    banks = query(f"""SELECT bank_id, arg_max(zone_id, gaming_date) zone_id FROM {T('mart_machine_daily')}
-                      GROUP BY bank_id ORDER BY bank_id""")
+                      WHERE gaming_date BETWEEN ? AND ?
+                      GROUP BY zone_id ORDER BY zone_name""", [start, end])
+    banks = query(f"""SELECT bank_id, zone_id, COUNT(DISTINCT machine_id) machines
+                      FROM {T('mart_machine_daily')} WHERE gaming_date BETWEEN ? AND ?
+                      GROUP BY bank_id, zone_id ORDER BY bank_id""", [start, end])
     guests = query(f"SELECT DISTINCT opening_tier, age_band, home_region FROM {T('mart_player_month')}")
     tier_order = ["Base", "Bronze", "Silver", "Gold", "Platinum"]
 
@@ -92,9 +94,9 @@ def _options(_stamp: float) -> dict:
     }
 
 
-def filter_options() -> dict:
+def filter_options(f=None) -> dict:
     """Dropdown values, read from the data so new zones or tiers appear automatically."""
-    return _options(_db_stamp())
+    return _options(_db_stamp(), f.start, f.end) if f else _options(_db_stamp())
 
 
 def zone_name(zone_id: str) -> str:
@@ -118,7 +120,8 @@ class Filters:
     tier: str = ""          # opening_tier
     age_band: str = ""
     home_region: str = ""
-    diag: str = ""          # machine explorer: highlight one primary_classification
+    diag: str = ""          # legacy URL field
+    indicator: str = ""     # overlapping observed underperformance indicator
 
     @classmethod
     def from_args(cls, args) -> "Filters":
@@ -127,14 +130,21 @@ class Filters:
         if start > end:
             start, end = end, start
         zone, bank = args.get("zone", ""), args.get("bank", "")
+        options = _options(_db_stamp(), start, end)
+        if zone and zone not in options['zone_names']:
+            zone = ""
         if bank:
-            bank_zone = {b["bank_id"]: b["zone_id"] for b in filter_options()["banks"]}.get(bank)
+            bank_zone = {b["bank_id"]: b["zone_id"] for b in options["banks"]}.get(bank)
             if bank_zone is None or (zone and bank_zone != zone):
                 bank = ""  # unknown bank, or a bank from another zone
             else:
                 zone = bank_zone
+        from .contract import UNDERPERFORMANCE_INDICATORS
+        indicator = args.get('indicator', '')
+        if indicator not in {item[0] for item in UNDERPERFORMANCE_INDICATORS}:
+            indicator = ''
         return cls(start, end, zone, bank, args.get("tier", ""), args.get("age_band", ""),
-                   args.get("home_region", ""), args.get("diag", ""))
+                   args.get("home_region", ""), '', indicator)
 
     # ---- SQL fragments -------------------------------------------------------------
     def where(self, date_col: str | None = "gaming_date", location: bool = True,
@@ -202,6 +212,7 @@ class Filters:
             "end": f.end.isoformat() if f.end != PERIOD_END else "",
             "zone": f.zone, "bank": f.bank, "tier": f.tier, "age_band": f.age_band,
             "home_region": f.home_region, "diag": f.diag,
+            "indicator": f.indicator,
         }
         params = {k: v for k, v in params.items() if v}
         return ("?" + urlencode(params)) if params else ""

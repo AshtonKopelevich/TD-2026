@@ -16,12 +16,14 @@ from flask import Flask, abort, redirect, render_template, request, send_file, u
 
 from . import pages
 from .contract import CLASSES
+from .charts import source_label
 from .data import DB_PATH, PERIOD_END, PERIOD_START, Filters, filter_options, is_placeholder
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True   # template edits show up without a restart
 PLOTLY_JS = Path(plotly.__file__).parent / "package_data" / "plotly.min.js"
 app.jinja_env.filters["todate"] = date.fromisoformat
+app.jinja_env.filters["source_label"] = source_label
 
 BUILDERS = {"verdict": pages.verdict, "machines": pages.machines, "demand": pages.demand,
             "downtime": pages.downtime, "guests": pages.guests, "forecast": pages.forecast, "plan": pages.plan}
@@ -50,7 +52,7 @@ def render_chapter(endpoint: str, *args):
     if page is None:
         abort(404)
     return render_template("chapter.html", page=page, meta=chapter_meta(endpoint), f=f,
-                           opts=filter_options(), active=endpoint)
+                           opts=filter_options(f), active=endpoint)
 
 
 @app.route("/")
